@@ -1,131 +1,186 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Copy, Check, Layers, Trash2 } from 'lucide-react';
+
 import { useAppContext } from '../context/AppContext';
 import { buildPromptForPost, copyToClipboard } from '../utils/promptBuilder';
 import { calculateAnalytics } from '../utils/analytics';
 import { formatDateLocal } from '../utils/date';
 import { createFormatVariations } from '../utils/contentWorkflows';
-import type { Post, PostStatus, Platform, Format, ContentGoal, PostAnalytics } from '../types';
-import { Copy, Check, Layers, Trash2 } from 'lucide-react';
+
+import type {
+  ContentGoal,
+  Format,
+  Platform,
+  Post,
+  PostAnalytics,
+  PostStatus,
+} from '../types';
+
+const generateId = (): string => {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+};
+
+const parseCommaList = (value: string): string[] => {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
 
 const createEmptyPost = (): Post => ({
-  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  id: generateId(),
   date: formatDateLocal(new Date()),
   time: '09:00',
+
   platform: 'Instagram',
   format: 'Instagram Post',
   goal: 'reach',
   funnelStage: 'attraction',
   mainMetric: 'views',
+
   topic: '',
   idea: '',
   hookVariants: [],
+  selectedHook: '',
+  hookType: 'question',
+
   visualScenario: '',
   textStructure: '',
   cta: '',
+
   seoKeys: [],
   lsiKeys: [],
   hashtags: [],
-  status: 'idea',
+  searchKeywords: [],
+  onScreenTextKeywords: [],
+
   firstFrameDescription: '',
   onScreenHookText: '',
   firstThreeSecondsPlan: '',
   retentionPlan: '',
-  searchKeywords: [],
-  onScreenTextKeywords: [],
   captionFirstLine: '',
   altText: '',
-});
 
-const createEmptyPost = (): Post => ({
-  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-  date: formatDateLocal(new Date()),
-  time: '09:00',
-  platform: 'Instagram',
-  format: 'Instagram Post',
-  goal: 'reach',
-  funnelStage: 'attraction',
-  mainMetric: 'views',
-  topic: '',
-  idea: '',
-  hookVariants: [],
-  visualScenario: '',
-  textStructure: '',
-  cta: '',
-  seoKeys: [],
-  lsiKeys: [],
-  hashtags: [],
+  promptForAI: '',
+  aiResponse: '',
+  notes: '',
+
   status: 'idea',
 });
 
-const PostEditor: React.FC = () => {
+const emptyAnalyticsFields: Array<
+  keyof Omit<
+    PostAnalytics,
+    | 'engagementRate'
+    | 'saveRate'
+    | 'shareRate'
+    | 'commentRate'
+    | 'subscribeConversionRate'
+    | 'leadConversionRate'
+  >
+> = [
+  'views',
+  'likes',
+  'comments',
+  'saves',
+  'shares',
+  'subscribes',
+  'leads',
+  'profileVisits',
+];
+
+function PostEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, addPost, addPosts, updatePost, deletePost, updateData } = useAppContext();
+
+  const {
+    data,
+    addPost,
+    addPosts,
+    updatePost,
+    deletePost,
+    updateData,
+  } = useAppContext();
+
   const isNewPost = id === 'new';
 
-  const post = isNewPost ? undefined : data.posts.find((p) => p.id === id);
+  const existingPost = useMemo(() => {
+    if (isNewPost || !id) return undefined;
+    return data.posts.find((post) => post.id === id);
+  }, [data.posts, id, isNewPost]);
 
-  const [formData, setFormData] = useState<Partial<Post>>(post || createEmptyPost());
+  const [formData, setFormData] = useState<Post>(() => {
+    return existingPost ?? createEmptyPost();
+  });
+
   const [copied, setCopied] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
-    if (post) {
-      setFormData(post);
-    } else if (isNewPost) {
+    if (existingPost) {
+      setFormData(existingPost);
+      return;
+    }
+
+    if (isNewPost) {
       setFormData(createEmptyPost());
     }
-  }, [isNewPost, post]);
-
-  if (!post && !isNewPost) {
-    return (
-      <div className="post-editor">
-        <div className="card">
-          <h2>Пост не найден</h2>
-          <button className="btn btn-primary" onClick={() => navigate('/calendar')}>
-            Вернуться к календарю
-          </button>
-        </div>
-      </div>
-    );
-  }
+  }, [existingPost, isNewPost]);
 
   const handleChange = <K extends keyof Post>(field: K, value: Post[K]) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const saveSelectedHookToLibrary = (postToSave: Post) => {
+    if (!postToSave.selectedHook) return;
+
+    const hookLibrary = data.hookLibrary ?? [];
+    const alreadyExists = hookLibrary.some(
+      (hook) => hook.text === postToSave.selectedHook,
+    );
+
+    if (alreadyExists) return;
+
+    updateData({
+      hookLibrary: [
+        {
+          id: generateId(),
+          text: postToSave.selectedHook,
+          hookType: postToSave.hookType || 'question',
+          platform: postToSave.platform,
+          format: postToSave.format,
+          sourcePostId: postToSave.id,
+          usageCount: 1,
+          status: 'testing',
+          createdAt: new Date().toISOString(),
+        },
+        ...hookLibrary,
+      ],
+    });
   };
 
   const handleSave = () => {
-    if (id) {
-      const savedPost = formData as Post;
-      if (savedPost.selectedHook && !data.hookLibrary.some((hook) => hook.text === savedPost.selectedHook)) {
-        updateData({
-          hookLibrary: [
-            {
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              text: savedPost.selectedHook,
-              hookType: savedPost.hookType || 'question',
-              platform: savedPost.platform,
-              format: savedPost.format,
-              sourcePostId: savedPost.id,
-              usageCount: 1,
-              status: 'testing',
-              createdAt: new Date().toISOString(),
-            },
-            ...data.hookLibrary,
-          ],
-        });
-      }
+    const postToSave: Post = {
+      ...createEmptyPost(),
+      ...formData,
+      id: formData.id || generateId(),
+    };
 
-      if (isNewPost) {
-        addPost(savedPost);
-        alert('Пост создан');
-      } else {
-        updatePost(id, formData);
-        alert('Пост сохранен');
-      }
-      navigate('/calendar');
+    saveSelectedHookToLibrary(postToSave);
+
+    if (isNewPost) {
+      addPost(postToSave);
+      alert('Пост создан');
+    } else if (id) {
+      updatePost(id, postToSave);
+      alert('Пост сохранен');
     }
+
+    navigate('/calendar');
   };
 
   const handleDelete = () => {
@@ -134,53 +189,119 @@ const PostEditor: React.FC = () => {
       return;
     }
 
-    if (confirm('Удалить этот пост?')) {
-      deletePost(id!);
+    if (!id) return;
+
+    const confirmed = window.confirm('Удалить этот пост?');
+
+    if (confirmed) {
+      deletePost(id);
       navigate('/calendar');
     }
   };
 
   const handleCreateFormatVersions = () => {
-    const variations = createFormatVariations({ ...(post || {}), ...formData } as Post);
+    const postForVariations: Post = {
+      ...createEmptyPost(),
+      ...existingPost,
+      ...formData,
+    };
+
+    const variations = createFormatVariations(postForVariations);
+
     addPosts(variations);
     alert('Созданы варианты этого материала в других форматах');
     navigate('/calendar');
   };
 
   const handleGeneratePrompt = () => {
-    const prompt = buildPromptForPost({ ...(post || {}), ...formData } as Post, data.settings);
-    handleChange('promptForAI', prompt);
-    handleChange('status', 'prompt-ready');
+    const prompt = buildPromptForPost(formData, data.settings);
+
+    setFormData((prev) => ({
+      ...prev,
+      promptForAI: prompt,
+      status: 'prompt-ready',
+    }));
   };
 
   const handleCopyPrompt = async () => {
-    if (formData.promptForAI) {
-      const success = await copyToClipboard(formData.promptForAI);
-      if (success) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
+    if (!formData.promptForAI) return;
+
+    const success = await copyToClipboard(formData.promptForAI);
+
+    if (success) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleAnalyticsChange = (field: keyof Omit<PostAnalytics, 'engagementRate' | 'saveRate' | 'shareRate' | 'commentRate' | 'subscribeConversionRate' | 'leadConversionRate'>, value: number) => {
-    const newAnalytics = { ...(formData.analytics || {}), [field]: value };
-    const calculated = calculateAnalytics(newAnalytics);
-    handleChange('analytics', calculated);
+  const handleAnalyticsChange = (
+    field: keyof Omit<
+      PostAnalytics,
+      | 'engagementRate'
+      | 'saveRate'
+      | 'shareRate'
+      | 'commentRate'
+      | 'subscribeConversionRate'
+      | 'leadConversionRate'
+    >,
+    value: number,
+  ) => {
+    const newAnalytics = {
+      ...(formData.analytics || {}),
+      [field]: value,
+    };
+
+    const calculatedAnalytics = calculateAnalytics(newAnalytics);
+
+    handleChange('analytics', calculatedAnalytics);
   };
+
+  if (!existingPost && !isNewPost) {
+    return (
+      <div className="post-editor">
+        <div className="card">
+          <h2>Пост не найден</h2>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/calendar')}
+          >
+            Вернуться к календарю
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="post-editor">
       <header className="page-header">
         <h1>{isNewPost ? 'Новый пост' : 'Редактор поста'}</h1>
+
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={handleCreateFormatVersions}>
-            <Layers size={16} /> Переупаковать в форматы
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleCreateFormatVersions}
+          >
+            <Layers size={16} />
+            Переупаковать в форматы
           </button>
-          <button className="btn btn-primary" onClick={handleSave}>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSave}
+          >
             Сохранить
           </button>
-          <button className="btn btn-danger" onClick={handleDelete}>
+
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={handleDelete}
+          >
             <Trash2 size={16} />
             {isNewPost ? 'Отмена' : 'Удалить'}
           </button>
@@ -192,26 +313,48 @@ const PostEditor: React.FC = () => {
           <h2>Основная информация</h2>
 
           <div className="form-group">
-            <label>Дата публикации</label>
-            <input type="date" value={formData.date} onChange={(e) => handleChange('date', e.target.value)} />
+            <label htmlFor="post-date">Дата публикации</label>
+            <input
+              id="post-date"
+              type="date"
+              value={formData.date}
+              onChange={(event) => handleChange('date', event.target.value)}
+            />
           </div>
 
           <div className="form-group">
-            <label>Время</label>
-            <input type="time" value={formData.time} onChange={(e) => handleChange('time', e.target.value)} />
+            <label htmlFor="post-time">Время</label>
+            <input
+              id="post-time"
+              type="time"
+              value={formData.time}
+              onChange={(event) => handleChange('time', event.target.value)}
+            />
           </div>
 
           <div className="form-group">
-            <label>Платформа</label>
-            <select value={formData.platform} onChange={(e) => handleChange('platform', e.target.value as Platform)}>
+            <label htmlFor="post-platform">Платформа</label>
+            <select
+              id="post-platform"
+              value={formData.platform}
+              onChange={(event) =>
+                handleChange('platform', event.target.value as Platform)
+              }
+            >
               <option value="TikTok">TikTok</option>
               <option value="Instagram">Instagram</option>
             </select>
           </div>
 
           <div className="form-group">
-            <label>Формат</label>
-            <select value={formData.format} onChange={(e) => handleChange('format', e.target.value as Format)}>
+            <label htmlFor="post-format">Формат</label>
+            <select
+              id="post-format"
+              value={formData.format}
+              onChange={(event) =>
+                handleChange('format', event.target.value as Format)
+              }
+            >
               <option value="TikTok Video">TikTok Video</option>
               <option value="TikTok Slideshow">TikTok Slideshow</option>
               <option value="Instagram Reels">Instagram Reels</option>
@@ -222,8 +365,14 @@ const PostEditor: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>Цель</label>
-            <select value={formData.goal} onChange={(e) => handleChange('goal', e.target.value as ContentGoal)}>
+            <label htmlFor="post-goal">Цель</label>
+            <select
+              id="post-goal"
+              value={formData.goal}
+              onChange={(event) =>
+                handleChange('goal', event.target.value as ContentGoal)
+              }
+            >
               <option value="reach">Охват</option>
               <option value="engagement">Вовлечение</option>
               <option value="trust">Доверие</option>
@@ -233,8 +382,14 @@ const PostEditor: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>Статус</label>
-            <select value={formData.status} onChange={(e) => handleChange('status', e.target.value as PostStatus)}>
+            <label htmlFor="post-status">Статус</label>
+            <select
+              id="post-status"
+              value={formData.status}
+              onChange={(event) =>
+                handleChange('status', event.target.value as PostStatus)
+              }
+            >
               <option value="idea">Идея</option>
               <option value="prompt-ready">Промпт готов</option>
               <option value="text-ready">Текст готов</option>
@@ -245,86 +400,143 @@ const PostEditor: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>Тема</label>
-            <input type="text" value={formData.topic} onChange={(e) => handleChange('topic', e.target.value)} />
+            <label htmlFor="post-topic">Тема</label>
+            <input
+              id="post-topic"
+              type="text"
+              value={formData.topic}
+              onChange={(event) => handleChange('topic', event.target.value)}
+            />
           </div>
 
           <div className="form-group">
-            <label>Идея</label>
+            <label htmlFor="post-idea">Идея</label>
             <textarea
+              id="post-idea"
               rows={3}
               value={formData.idea}
-              onChange={(e) => handleChange('idea', e.target.value)}
+              onChange={(event) => handleChange('idea', event.target.value)}
               placeholder="Опишите основную идею поста"
             />
           </div>
 
           <div className="form-group">
-            <label>Call-to-Action (CTA)</label>
+            <label htmlFor="post-cta">Call-to-Action</label>
             <input
+              id="post-cta"
               type="text"
               value={formData.cta}
-              onChange={(e) => handleChange('cta', e.target.value)}
+              onChange={(event) => handleChange('cta', event.target.value)}
               placeholder="Что должен сделать зритель?"
             />
           </div>
 
           <div className="form-group">
-            <label>Контроль первых кадров для Reels/TikTok</label>
+            <label htmlFor="first-frame">
+              Контроль первых кадров для Reels/TikTok
+            </label>
             <textarea
+              id="first-frame"
               rows={2}
               value={formData.firstFrameDescription || ''}
-              onChange={(e) => handleChange('firstFrameDescription', e.target.value)}
+              onChange={(event) =>
+                handleChange('firstFrameDescription', event.target.value)
+              }
               placeholder="Что видно в первом кадре, чтобы остановить скролл?"
             />
           </div>
+
           <div className="form-row">
             <div className="form-group">
-              <label>Текст на экране</label>
-              <input value={formData.onScreenHookText || ''} onChange={(e) => handleChange('onScreenHookText', e.target.value)} />
+              <label htmlFor="screen-hook">Текст на экране</label>
+              <input
+                id="screen-hook"
+                value={formData.onScreenHookText || ''}
+                onChange={(event) =>
+                  handleChange('onScreenHookText', event.target.value)
+                }
+              />
             </div>
+
             <div className="form-group">
-              <label>Первые 3 секунды</label>
-              <input value={formData.firstThreeSecondsPlan || ''} onChange={(e) => handleChange('firstThreeSecondsPlan', e.target.value)} />
+              <label htmlFor="first-seconds">Первые 3 секунды</label>
+              <input
+                id="first-seconds"
+                value={formData.firstThreeSecondsPlan || ''}
+                onChange={(event) =>
+                  handleChange('firstThreeSecondsPlan', event.target.value)
+                }
+              />
             </div>
-          </div>
-          <div className="form-group">
-            <label>Retention-план</label>
-            <textarea rows={2} value={formData.retentionPlan || ''} onChange={(e) => handleChange('retentionPlan', e.target.value)} />
           </div>
 
           <div className="form-group">
-            <label>Search SEO: ключевые фразы</label>
+            <label htmlFor="retention-plan">Retention-план</label>
+            <textarea
+              id="retention-plan"
+              rows={2}
+              value={formData.retentionPlan || ''}
+              onChange={(event) =>
+                handleChange('retentionPlan', event.target.value)
+              }
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="search-keywords">Search SEO: ключевые фразы</label>
             <input
+              id="search-keywords"
               value={formData.searchKeywords?.join(', ') || ''}
-              onChange={(e) => handleChange('searchKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+              onChange={(event) =>
+                handleChange('searchKeywords', parseCommaList(event.target.value))
+              }
               placeholder="картина в интерьер, интерьерный скетч, картина маслом"
             />
           </div>
+
           <div className="form-row">
             <div className="form-group">
-              <label>Ключи на экране</label>
+              <label htmlFor="screen-keywords">Ключи на экране</label>
               <input
+                id="screen-keywords"
                 value={formData.onScreenTextKeywords?.join(', ') || ''}
-                onChange={(e) => handleChange('onScreenTextKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+                onChange={(event) =>
+                  handleChange(
+                    'onScreenTextKeywords',
+                    parseCommaList(event.target.value),
+                  )
+                }
               />
             </div>
+
             <div className="form-group">
-              <label>Первая строка описания</label>
-              <input value={formData.captionFirstLine || ''} onChange={(e) => handleChange('captionFirstLine', e.target.value)} />
+              <label htmlFor="caption-line">Первая строка описания</label>
+              <input
+                id="caption-line"
+                value={formData.captionFirstLine || ''}
+                onChange={(event) =>
+                  handleChange('captionFirstLine', event.target.value)
+                }
+              />
             </div>
-          </div>
-          <div className="form-group">
-            <label>Alt/описание визуала</label>
-            <input value={formData.altText || ''} onChange={(e) => handleChange('altText', e.target.value)} />
           </div>
 
           <div className="form-group">
-            <label>Заметки</label>
+            <label htmlFor="alt-text">Alt/описание визуала</label>
+            <input
+              id="alt-text"
+              value={formData.altText || ''}
+              onChange={(event) => handleChange('altText', event.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="post-notes">Заметки</label>
             <textarea
+              id="post-notes"
               rows={3}
               value={formData.notes || ''}
-              onChange={(e) => handleChange('notes', e.target.value)}
+              onChange={(event) => handleChange('notes', event.target.value)}
               placeholder="Любые заметки по посту"
             />
           </div>
@@ -332,7 +544,12 @@ const PostEditor: React.FC = () => {
 
         <section className="card">
           <h2>Промпт для ИИ</h2>
-          <button className="btn btn-primary" onClick={handleGeneratePrompt}>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleGeneratePrompt}
+          >
             Сгенерировать промпт
           </button>
 
@@ -341,14 +558,21 @@ const PostEditor: React.FC = () => {
               <div className="prompt-display">
                 <pre>{formData.promptForAI}</pre>
               </div>
-              <button className="btn btn-secondary" onClick={handleCopyPrompt}>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleCopyPrompt}
+              >
                 {copied ? (
                   <>
-                    <Check size={16} /> Скопировано
+                    <Check size={16} />
+                    Скопировано
                   </>
                 ) : (
                   <>
-                    <Copy size={16} /> Скопировать промпт
+                    <Copy size={16} />
+                    Скопировать промпт
                   </>
                 )}
               </button>
@@ -360,41 +584,51 @@ const PostEditor: React.FC = () => {
           <h2>Контент</h2>
 
           <div className="form-group">
-            <label>Визуальный сценарий</label>
+            <label htmlFor="visual-scenario">Визуальный сценарий</label>
             <textarea
+              id="visual-scenario"
               rows={5}
               value={formData.visualScenario}
-              onChange={(e) => handleChange('visualScenario', e.target.value)}
+              onChange={(event) =>
+                handleChange('visualScenario', event.target.value)
+              }
               placeholder="Опишите, что будет на экране кадр за кадром"
             />
           </div>
 
           <div className="form-group">
-            <label>Структура текста</label>
+            <label htmlFor="text-structure">Структура текста</label>
             <textarea
+              id="text-structure"
               rows={5}
               value={formData.textStructure}
-              onChange={(e) => handleChange('textStructure', e.target.value)}
+              onChange={(event) =>
+                handleChange('textStructure', event.target.value)
+              }
               placeholder="Структура текста или сценарий озвучки"
             />
           </div>
 
           <div className="form-group">
-            <label>Ответ ИИ / Готовый текст</label>
+            <label htmlFor="ai-response">Ответ ИИ / готовый текст</label>
             <textarea
+              id="ai-response"
               rows={8}
               value={formData.aiResponse || ''}
-              onChange={(e) => handleChange('aiResponse', e.target.value)}
+              onChange={(event) => handleChange('aiResponse', event.target.value)}
               placeholder="Вставьте ответ от ChatGPT/Claude или напишите финальный текст"
             />
           </div>
 
           <div className="form-group">
-            <label>Хэштеги (через запятую)</label>
+            <label htmlFor="hashtags">Хэштеги, максимум 5</label>
             <input
+              id="hashtags"
               type="text"
               value={formData.hashtags?.join(', ') || ''}
-              onChange={(e) => handleChange('hashtags', e.target.value.split(',').map((h) => h.trim()))}
+              onChange={(event) =>
+                handleChange('hashtags', parseCommaList(event.target.value).slice(0, 5))
+              }
               placeholder="#хэштег1, #хэштег2, #хэштег3, #хэштег4, #хэштег5"
             />
           </div>
@@ -402,83 +636,63 @@ const PostEditor: React.FC = () => {
 
         <section className="card">
           <h2>Аналитика</h2>
-          <button className="btn btn-secondary" onClick={() => setShowAnalytics(!showAnalytics)}>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowAnalytics((prev) => !prev)}
+          >
             {showAnalytics ? 'Скрыть' : 'Добавить результаты'}
           </button>
 
           {showAnalytics && (
             <div className="analytics-form">
               <div className="form-row">
-                <div className="form-group">
-                  <label>Просмотры</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.views || 0}
-                    onChange={(e) => handleAnalyticsChange('views', Number(e.target.value))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Лайки</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.likes || 0}
-                    onChange={(e) => handleAnalyticsChange('likes', Number(e.target.value))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Комментарии</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.comments || 0}
-                    onChange={(e) => handleAnalyticsChange('comments', Number(e.target.value))}
-                  />
-                </div>
+                {emptyAnalyticsFields.slice(0, 3).map((field) => (
+                  <div className="form-group" key={field}>
+                    <label>{analyticsLabelMap[field]}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.analytics?.[field] || 0}
+                      onChange={(event) =>
+                        handleAnalyticsChange(field, Number(event.target.value))
+                      }
+                    />
+                  </div>
+                ))}
               </div>
 
               <div className="form-row">
-                <div className="form-group">
-                  <label>Сохранения</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.saves || 0}
-                    onChange={(e) => handleAnalyticsChange('saves', Number(e.target.value))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Репосты</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.shares || 0}
-                    onChange={(e) => handleAnalyticsChange('shares', Number(e.target.value))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Подписки</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.subscribes || 0}
-                    onChange={(e) => handleAnalyticsChange('subscribes', Number(e.target.value))}
-                  />
-                </div>
+                {emptyAnalyticsFields.slice(3, 6).map((field) => (
+                  <div className="form-group" key={field}>
+                    <label>{analyticsLabelMap[field]}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.analytics?.[field] || 0}
+                      onChange={(event) =>
+                        handleAnalyticsChange(field, Number(event.target.value))
+                      }
+                    />
+                  </div>
+                ))}
               </div>
 
               <div className="form-row">
-                <div className="form-group">
-                  <label>Заявки</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.leads || 0}
-                    onChange={(e) => handleAnalyticsChange('leads', Number(e.target.value))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Переходы в профиль</label>
-                  <input
-                    type="number"
-                    value={formData.analytics?.profileVisits || 0}
-                    onChange={(e) => handleAnalyticsChange('profileVisits', Number(e.target.value))}
-                  />
-                </div>
+                {emptyAnalyticsFields.slice(6).map((field) => (
+                  <div className="form-group" key={field}>
+                    <label>{analyticsLabelMap[field]}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.analytics?.[field] || 0}
+                      onChange={(event) =>
+                        handleAnalyticsChange(field, Number(event.target.value))
+                      }
+                    />
+                  </div>
+                ))}
               </div>
 
               {formData.analytics && (
@@ -488,8 +702,13 @@ const PostEditor: React.FC = () => {
                   <p>Save Rate: {formData.analytics.saveRate}%</p>
                   <p>Share Rate: {formData.analytics.shareRate}%</p>
                   <p>Comment Rate: {formData.analytics.commentRate}%</p>
-                  <p>Subscribe Conversion: {formData.analytics.subscribeConversionRate}%</p>
-                  <p>Lead Conversion: {formData.analytics.leadConversionRate}%</p>
+                  <p>
+                    Subscribe Conversion:{' '}
+                    {formData.analytics.subscribeConversionRate}%
+                  </p>
+                  <p>
+                    Lead Conversion: {formData.analytics.leadConversionRate}%
+                  </p>
                 </div>
               )}
             </div>
@@ -498,6 +717,28 @@ const PostEditor: React.FC = () => {
       </div>
     </div>
   );
+}
+
+const analyticsLabelMap: Record<
+  keyof Omit<
+    PostAnalytics,
+    | 'engagementRate'
+    | 'saveRate'
+    | 'shareRate'
+    | 'commentRate'
+    | 'subscribeConversionRate'
+    | 'leadConversionRate'
+  >,
+  string
+> = {
+  views: 'Просмотры',
+  likes: 'Лайки',
+  comments: 'Комментарии',
+  saves: 'Сохранения',
+  shares: 'Репосты',
+  subscribes: 'Подписки',
+  leads: 'Заявки',
+  profileVisits: 'Переходы в профиль',
 };
 
 export default PostEditor;
