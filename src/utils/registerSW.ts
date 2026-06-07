@@ -1,12 +1,9 @@
-// Register service worker for PWA functionality
+import { logger } from './logger';
+
+// PWA service worker registration is intentionally kept as a placeholder.
+// Offline support will be implemented in a future iteration after the core data flow is stable.
 export const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator) {
-    try {
-      // For now, we'll skip SW registration as we can't create .js files
-      // The app will work as a SPA without offline capabilities
-      console.log('Service Worker registration skipped - app works online');
-    } catch (error) {
-      console.error('Service Worker registration failed:', error);
-    }
+    logger.debug('Service Worker registration is in development and currently disabled');
   }
 };

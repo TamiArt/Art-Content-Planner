@@ -8,18 +8,12 @@ import type {
   HookType,
   GeneratorSettings,
 } from '../types';
+import { formatDateLocal } from './date';
+import { logger } from './logger';
 
 // Helper to generate unique ID
 const generateId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-// Helper to format date as YYYY-MM-DD without timezone conversion
-const formatDateLocal = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 interface TopicRule {
@@ -114,13 +108,6 @@ const TOPIC_RULES: TopicRule[] = [
   },
 ];
 
-const FUNNEL_TO_GOAL_MAP: Record<FunnelStage, ContentGoal[]> = {
-  attraction: ['reach'],
-  retention: ['engagement', 'reach'],
-  trust: ['trust', 'engagement'],
-  conversion: ['lead', 'sale'],
-};
-
 const CTA_TEMPLATES: Record<ContentGoal, string[]> = {
   reach: [
     'Сохраняй, чтобы не потерять',
@@ -209,6 +196,27 @@ const selectRandom = <T>(array: T[]): T => {
   return array[Math.floor(Math.random() * array.length)];
 };
 
+const getFunnelStageForGoal = (goal: ContentGoal): FunnelStage => {
+  if (goal === 'reach') return 'attraction';
+  if (goal === 'engagement') return 'retention';
+  if (goal === 'trust') return 'trust';
+  return 'conversion';
+};
+
+const getMainMetricForGoal = (goal: ContentGoal): string => {
+  if (goal === 'reach') return 'views';
+  if (goal === 'engagement') return 'saves';
+  if (goal === 'trust') return 'subscribes';
+  return 'leads';
+};
+
+
+const selectTopicRuleWithGuard = (rules: TopicRule[], guard: RepetitionGuard): TopicRule => {
+  const available = rules.filter((rule) => guard.check(rule.topic, 'topic'));
+  if (available.length === 0) return rules[0];
+  return selectRandom(available);
+};
+
 const selectRandomWithGuard = <T extends string>(
   array: T[],
   guard: RepetitionGuard,
@@ -226,7 +234,7 @@ export interface MonthGeneratorParams {
 
 export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
   const { month, settings } = params;
-  const { defaultPostsPerWeek, defaultDays, defaultTimes, defaultPlatforms, defaultGoals } = settings;
+  const { defaultDays, defaultTimes, defaultPlatforms, defaultGoals } = settings;
 
   const posts: Post[] = [];
   const guard = new RepetitionGuard();
@@ -235,9 +243,15 @@ export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
   const firstDay = new Date(year, monthNum - 1, 1);
   const lastDay = new Date(year, monthNum, 0);
 
-  console.log('Month generator:', { year, monthNum, firstDay: firstDay.toISOString(), lastDay: lastDay.toISOString() });
+  logger.debug('Month generator:', {
+    year,
+    monthNum,
+    firstDay: firstDay.toISOString(),
+    lastDay: lastDay.toISOString(),
+    days: defaultDays,
+    times: defaultTimes,
+  });
 
-  // Get all Mondays, Wednesdays, Fridays (or selected days) in the month
   const dayNameToNum: Record<string, number> = {
     Sunday: 0,
     Monday: 1,
@@ -248,98 +262,81 @@ export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
     Saturday: 6,
   };
 
-  const selectedDayNums = defaultDays.map((d) => dayNameToNum[d]);
+  const selectedDayNums = defaultDays.map((day) => dayNameToNum[day]).filter((dayNum) => dayNum !== undefined);
   const dates: Date[] = [];
 
-  // Fix: Create new Date for each iteration to avoid mutation issues
   const currentDate = new Date(firstDay);
   while (currentDate <= lastDay) {
-    if (selectedDayNums.includes(currentDate.getDay())) {
-      // Only add if date is within the selected month
-      if (currentDate.getMonth() === monthNum - 1) {
-        dates.push(new Date(currentDate));
-      }
+    if (selectedDayNums.includes(currentDate.getDay()) && currentDate.getMonth() === monthNum - 1) {
+      dates.push(new Date(currentDate));
     }
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  console.log('Generated dates count:', dates.length);
+  logger.debug('Generated dates count:', dates.length);
   if (dates.length > 0) {
-    console.log('First date:', dates[0].toISOString());
-    console.log('Last date:', dates[dates.length - 1].toISOString());
+    logger.debug('First date:', dates[0].toISOString());
+    logger.debug('Last date:', dates[dates.length - 1].toISOString());
   }
 
-  // Generate posts for each date
-  dates.forEach((date, index) => {
-    const dayIndex = index % defaultDays.length;
-    const goal = defaultGoals[dayIndex % defaultGoals.length];
-    const time = defaultTimes[dayIndex % defaultTimes.length];
+  let postIndex = 0;
 
-    // Map goal to funnel stage
-    const funnelStage: FunnelStage =
-      goal === 'reach'
-        ? 'attraction'
-        : goal === 'engagement'
-          ? 'retention'
-          : goal === 'trust'
-            ? 'trust'
-            : 'conversion';
+  dates.forEach((date) => {
+    defaultTimes.forEach((time) => {
+      const goal = defaultGoals[postIndex % defaultGoals.length];
+      const funnelStage = getFunnelStageForGoal(goal);
 
-    // Find suitable topics
-    const suitableTopics = TOPIC_RULES.filter((rule) => rule.funnelStages.includes(funnelStage));
-    const topicRule = selectRandomWithGuard(
-      suitableTopics,
-      guard,
-      'topic'
-    ) as TopicRule;
+      const compatibleTopics = TOPIC_RULES.filter(
+        (rule) => rule.funnelStages.includes(funnelStage) && rule.platforms.some((platform) => defaultPlatforms.includes(platform))
+      );
+      const funnelTopics = TOPIC_RULES.filter((rule) => rule.funnelStages.includes(funnelStage));
+      const suitableTopics = compatibleTopics.length > 0 ? compatibleTopics : funnelTopics.length > 0 ? funnelTopics : TOPIC_RULES;
+      const topicRule = selectTopicRuleWithGuard(suitableTopics, guard);
 
-    // Select platform
-    const platform = selectRandom(topicRule.platforms.filter((p) => defaultPlatforms.includes(p)));
+      const matchingPlatforms = topicRule.platforms.filter((platform) => defaultPlatforms.includes(platform));
+      const platform = selectRandom(matchingPlatforms.length > 0 ? matchingPlatforms : topicRule.platforms);
 
-    // Select format for platform
-    const platformFormats = topicRule.formats.filter((f) =>
-      platform === 'TikTok' ? f.startsWith('TikTok') : f.startsWith('Instagram')
-    );
-    const format = selectRandomWithGuard(platformFormats, guard, 'format');
+      const platformFormats = topicRule.formats.filter((format) =>
+        platform === 'TikTok' ? format.startsWith('TikTok') : format.startsWith('Instagram')
+      );
+      const format = selectRandomWithGuard(platformFormats.length > 0 ? platformFormats : topicRule.formats, guard, 'format');
 
-    // Select hook type
-    const hookType = selectRandomWithGuard(topicRule.hookTypes, guard, 'hook');
+      const hookType = selectRandomWithGuard(topicRule.hookTypes, guard, 'hook');
+      const ctaOptions = CTA_TEMPLATES[goal] || CTA_TEMPLATES.reach;
+      const cta = selectRandomWithGuard(ctaOptions, guard, 'cta');
 
-    // Select CTA
-    const ctaOptions = CTA_TEMPLATES[goal] || CTA_TEMPLATES.reach;
-    const cta = selectRandomWithGuard(ctaOptions, guard, 'cta');
+      guard.add(topicRule.topic, 'topic');
+      guard.add(goal, 'goal');
+      guard.add(format, 'format');
+      guard.add(hookType, 'hook');
+      guard.add(cta, 'cta');
 
-    // Add to guard
-    guard.add(topicRule.topic, 'topic');
-    guard.add(goal, 'goal');
-    guard.add(format, 'format');
-    guard.add(hookType, 'hook');
-    guard.add(cta, 'cta');
+      const post: Post = {
+        id: generateId(),
+        date: formatDateLocal(date),
+        time,
+        platform,
+        format,
+        goal,
+        funnelStage,
+        mainMetric: getMainMetricForGoal(goal),
+        contentSeries: topicRule.series,
+        topic: topicRule.topic,
+        idea: `${topicRule.topic} - ${format}`,
+        hookType,
+        hookVariants: [],
+        visualScenario: '',
+        textStructure: '',
+        cta,
+        seoKeys: [],
+        lsiKeys: [],
+        hashtags: [],
+        status: 'idea',
+      };
 
-    const post: Post = {
-      id: generateId(),
-      date: formatDateLocal(date),
-      time,
-      platform,
-      format,
-      goal,
-      funnelStage,
-      mainMetric: goal === 'reach' ? 'views' : goal === 'engagement' ? 'saves' : goal === 'trust' ? 'subscribes' : 'leads',
-      contentSeries: topicRule.series,
-      topic: topicRule.topic,
-      idea: `${topicRule.topic} - ${format}`,
-      hookType,
-      hookVariants: [],
-      visualScenario: '',
-      textStructure: '',
-      cta,
-      seoKeys: [],
-      lsiKeys: [],
-      hashtags: [],
-      status: 'idea',
-    };
-
-    posts.push(post);
+      posts.push(post);
+      postIndex += 1;
+    });
   });
 
   return posts;
