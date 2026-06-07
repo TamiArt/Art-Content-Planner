@@ -37,6 +37,27 @@ const createEmptyPost = (): Post => ({
   altText: '',
 });
 
+const createEmptyPost = (): Post => ({
+  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  date: formatDateLocal(new Date()),
+  time: '09:00',
+  platform: 'Instagram',
+  format: 'Instagram Post',
+  goal: 'reach',
+  funnelStage: 'attraction',
+  mainMetric: 'views',
+  topic: '',
+  idea: '',
+  hookVariants: [],
+  visualScenario: '',
+  textStructure: '',
+  cta: '',
+  seoKeys: [],
+  lsiKeys: [],
+  hashtags: [],
+  status: 'idea',
+});
+
 const PostEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
