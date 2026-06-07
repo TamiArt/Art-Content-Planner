@@ -4,8 +4,38 @@ import { useAppContext } from '../context/AppContext';
 import { buildPromptForPost, copyToClipboard } from '../utils/promptBuilder';
 import { calculateAnalytics } from '../utils/analytics';
 import { formatDateLocal } from '../utils/date';
+import { createFormatVariations } from '../utils/contentWorkflows';
 import type { Post, PostStatus, Platform, Format, ContentGoal, PostAnalytics } from '../types';
-import { Copy, Check, Trash2 } from 'lucide-react';
+import { Copy, Check, Layers, Trash2 } from 'lucide-react';
+
+const createEmptyPost = (): Post => ({
+  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  date: formatDateLocal(new Date()),
+  time: '09:00',
+  platform: 'Instagram',
+  format: 'Instagram Post',
+  goal: 'reach',
+  funnelStage: 'attraction',
+  mainMetric: 'views',
+  topic: '',
+  idea: '',
+  hookVariants: [],
+  visualScenario: '',
+  textStructure: '',
+  cta: '',
+  seoKeys: [],
+  lsiKeys: [],
+  hashtags: [],
+  status: 'idea',
+  firstFrameDescription: '',
+  onScreenHookText: '',
+  firstThreeSecondsPlan: '',
+  retentionPlan: '',
+  searchKeywords: [],
+  onScreenTextKeywords: [],
+  captionFirstLine: '',
+  altText: '',
+});
 
 const createEmptyPost = (): Post => ({
   id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -31,7 +61,7 @@ const createEmptyPost = (): Post => ({
 const PostEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, addPost, updatePost, deletePost } = useAppContext();
+  const { data, addPost, addPosts, updatePost, deletePost, updateData } = useAppContext();
   const isNewPost = id === 'new';
 
   const post = isNewPost ? undefined : data.posts.find((p) => p.id === id);
@@ -67,8 +97,28 @@ const PostEditor: React.FC = () => {
 
   const handleSave = () => {
     if (id) {
+      const savedPost = formData as Post;
+      if (savedPost.selectedHook && !data.hookLibrary.some((hook) => hook.text === savedPost.selectedHook)) {
+        updateData({
+          hookLibrary: [
+            {
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: savedPost.selectedHook,
+              hookType: savedPost.hookType || 'question',
+              platform: savedPost.platform,
+              format: savedPost.format,
+              sourcePostId: savedPost.id,
+              usageCount: 1,
+              status: 'testing',
+              createdAt: new Date().toISOString(),
+            },
+            ...data.hookLibrary,
+          ],
+        });
+      }
+
       if (isNewPost) {
-        addPost(formData as Post);
+        addPost(savedPost);
         alert('Пост создан');
       } else {
         updatePost(id, formData);
@@ -88,6 +138,13 @@ const PostEditor: React.FC = () => {
       deletePost(id!);
       navigate('/calendar');
     }
+  };
+
+  const handleCreateFormatVersions = () => {
+    const variations = createFormatVariations({ ...(post || {}), ...formData } as Post);
+    addPosts(variations);
+    alert('Созданы варианты этого материала в других форматах');
+    navigate('/calendar');
   };
 
   const handleGeneratePrompt = () => {
@@ -117,6 +174,9 @@ const PostEditor: React.FC = () => {
       <header className="page-header">
         <h1>{isNewPost ? 'Новый пост' : 'Редактор поста'}</h1>
         <div className="header-actions">
+          <button className="btn btn-secondary" onClick={handleCreateFormatVersions}>
+            <Layers size={16} /> Переупаковать в форматы
+          </button>
           <button className="btn btn-primary" onClick={handleSave}>
             Сохранить
           </button>
@@ -207,6 +267,56 @@ const PostEditor: React.FC = () => {
               onChange={(e) => handleChange('cta', e.target.value)}
               placeholder="Что должен сделать зритель?"
             />
+          </div>
+
+          <div className="form-group">
+            <label>Контроль первых кадров для Reels/TikTok</label>
+            <textarea
+              rows={2}
+              value={formData.firstFrameDescription || ''}
+              onChange={(e) => handleChange('firstFrameDescription', e.target.value)}
+              placeholder="Что видно в первом кадре, чтобы остановить скролл?"
+            />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Текст на экране</label>
+              <input value={formData.onScreenHookText || ''} onChange={(e) => handleChange('onScreenHookText', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Первые 3 секунды</label>
+              <input value={formData.firstThreeSecondsPlan || ''} onChange={(e) => handleChange('firstThreeSecondsPlan', e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Retention-план</label>
+            <textarea rows={2} value={formData.retentionPlan || ''} onChange={(e) => handleChange('retentionPlan', e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>Search SEO: ключевые фразы</label>
+            <input
+              value={formData.searchKeywords?.join(', ') || ''}
+              onChange={(e) => handleChange('searchKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+              placeholder="картина в интерьер, интерьерный скетч, картина маслом"
+            />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Ключи на экране</label>
+              <input
+                value={formData.onScreenTextKeywords?.join(', ') || ''}
+                onChange={(e) => handleChange('onScreenTextKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Первая строка описания</label>
+              <input value={formData.captionFirstLine || ''} onChange={(e) => handleChange('captionFirstLine', e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Alt/описание визуала</label>
+            <input value={formData.altText || ''} onChange={(e) => handleChange('altText', e.target.value)} />
           </div>
 
           <div className="form-group">

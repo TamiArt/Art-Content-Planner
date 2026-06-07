@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAppContext } from '../context/AppContext';
 import type { Painting } from '../types';
-import { Edit, Image, Plus, Trash2 } from 'lucide-react';
+import { Edit, Image, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { createPaintingContentCampaign } from '../utils/contentWorkflows';
 
 type PaintingForm = {
   title: string;
@@ -68,7 +70,8 @@ const paintingFromForm = (form: PaintingForm, id: string): Painting => ({
 });
 
 const Paintings: React.FC = () => {
-  const { data, addPainting, updatePainting, deletePainting } = useAppContext();
+  const navigate = useNavigate();
+  const { data, addPainting, updatePainting, deletePainting, addPosts, updateData } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PaintingForm>(emptyPaintingForm());
@@ -107,6 +110,41 @@ const Paintings: React.FC = () => {
       deletePainting(id);
       if (editingId === id) resetForm();
     }
+  };
+
+  const handleCreateCampaign = (painting: Painting) => {
+    const workflow = createPaintingContentCampaign(painting);
+    addPosts(workflow.posts);
+    updateData({
+      campaigns: [...data.campaigns, workflow.campaign],
+      storySequences: [...data.storySequences, ...workflow.storySequences],
+    });
+    alert('Созданы посты, кампания и Stories-цепочка для картины');
+    navigate('/campaigns');
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Выберите файл изображения');
+      return;
+    }
+
+    const maxSizeInMb = 2;
+    if (file.size > maxSizeInMb * 1024 * 1024) {
+      alert(`Изображение слишком большое. Лучше загрузить файл до ${maxSizeInMb} МБ, чтобы локальное сохранение работало стабильно.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        updateField('imageUrl', reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -157,9 +195,24 @@ const Paintings: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>URL изображения</label>
-            <input value={form.imageUrl} onChange={(event) => updateField('imageUrl', event.target.value)} placeholder="https://..." />
+            <label>Фото картины</label>
+            <input type="file" accept="image/*" onChange={handleImageUpload} />
+            <small className="form-hint">Можно загрузить фото до 2 МБ или вставить URL ниже. Фото сохраняется локально в JSON приложения.</small>
           </div>
+
+          <div className="form-group">
+            <label>URL изображения или локальное фото</label>
+            <input value={form.imageUrl} onChange={(event) => updateField('imageUrl', event.target.value)} placeholder="https://... или data:image/..." />
+          </div>
+
+          {form.imageUrl && (
+            <div className="catalog-image-preview">
+              <img src={form.imageUrl} alt="Предпросмотр картины" />
+              <button type="button" className="btn btn-secondary btn-small" onClick={() => updateField('imageUrl', '')}>
+                Убрать фото
+              </button>
+            </div>
+          )}
 
           <div className="form-row">
             <div className="form-group">
@@ -220,6 +273,11 @@ const Paintings: React.FC = () => {
                     <Trash2 size={16} />
                   </button>
                 </div>
+              </div>
+              <div className="catalog-source-actions">
+                <button className="btn btn-primary" onClick={() => handleCreateCampaign(painting)}>
+                  <Sparkles size={16} /> Создать посты из этой картины
+                </button>
               </div>
               <div className="painting-details">
                 <p><strong>Размер:</strong> {painting.size || '—'}</p>

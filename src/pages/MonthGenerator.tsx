@@ -115,6 +115,10 @@ const MonthGenerator: React.FC = () => {
           defaultPlatforms: selectedPlatforms,
           defaultGoals: selectedGoals,
         },
+        paintings: data.paintings,
+        services: data.services,
+        contentBalance: data.contentBalance,
+        rubrics: data.rubrics,
       });
 
       logger.debug('Generated posts count:', generatedPosts.length);
@@ -128,9 +132,9 @@ const MonthGenerator: React.FC = () => {
         const prompt = buildPromptForPost(post, data.settings);
         return {
           ...post,
-          seoKeys: seoData.seoKeys,
-          lsiKeys: seoData.lsiKeys,
-          hashtags: seoData.hashtags,
+          seoKeys: [...new Set([...post.seoKeys, ...seoData.seoKeys])],
+          lsiKeys: [...new Set([...post.lsiKeys, ...seoData.lsiKeys])],
+          hashtags: [...new Set([...post.hashtags, ...seoData.hashtags])].slice(0, 5),
           promptForAI: prompt,
           status: 'prompt-ready' as const,
         };
@@ -182,6 +186,11 @@ const MonthGenerator: React.FC = () => {
 
         <div className="info-box">
           План создаётся по выбранным дням недели и каждому указанному времени. Если выбрать 2 времени, в этот день будет 2 публикации.
+        </div>
+
+        <div className="info-box">
+          Генератор учитывает ваши каталоги: картин — {data.paintings.length}, услуг — {data.services.length}.
+          Для целей «Доверие», «Заявка» и «Продажа» он будет чаще брать конкретную картину или услугу как основу публикации.
         </div>
 
         <div className="form-group">

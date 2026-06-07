@@ -1,5 +1,5 @@
 import type { AppData } from '../types';
-import { DEFAULT_SETTINGS, DEFAULT_SEO_CLUSTERS } from '../types';
+import { DEFAULT_CONTENT_BALANCE, DEFAULT_RUBRICS, DEFAULT_SETTINGS, DEFAULT_SEO_CLUSTERS } from '../types';
 import { logger } from './logger';
 import { parseAppData } from './storageSchema';
 
@@ -15,6 +15,11 @@ export const getDefaultAppData = (): AppData => ({
   paintings: [],
   services: [],
   offers: [],
+  campaigns: [],
+  hookLibrary: [],
+  storySequences: [],
+  rubrics: DEFAULT_RUBRICS,
+  contentBalance: DEFAULT_CONTENT_BALANCE,
   seoCluster: DEFAULT_SEO_CLUSTERS,
   lastUpdated: new Date().toISOString(),
 });

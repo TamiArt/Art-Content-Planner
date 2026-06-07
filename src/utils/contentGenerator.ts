@@ -7,6 +7,10 @@ import type {
   ContentSeries,
   HookType,
   GeneratorSettings,
+  Painting,
+  Service,
+  ContentBalanceMatrix,
+  Rubric,
 } from '../types';
 import { formatDateLocal } from './date';
 import { logger } from './logger';
@@ -24,6 +28,121 @@ interface TopicRule {
   funnelStages: FunnelStage[];
   hookTypes: HookType[];
 }
+
+type CatalogContentSource =
+  | {
+      type: 'painting';
+      id: string;
+      title: string;
+      topic: string;
+      idea: string;
+      cta: string;
+      seoKeys: string[];
+      notes: string;
+      preferredGoals: ContentGoal[];
+      preferredFormats: Format[];
+      preferredPlatforms: Platform[];
+      series: ContentSeries;
+    }
+  | {
+      type: 'service';
+      id: string;
+      title: string;
+      topic: string;
+      idea: string;
+      cta: string;
+      seoKeys: string[];
+      notes: string;
+      preferredGoals: ContentGoal[];
+      preferredFormats: Format[];
+      preferredPlatforms: Platform[];
+      series: ContentSeries;
+    };
+
+const normalizeHashTag = (value: string): string => `#${value.replace(/^#/, '').replace(/\s+/g, '').toLowerCase()}`;
+
+const buildCatalogSources = (paintings: Painting[] = [], services: Service[] = []): CatalogContentSource[] => {
+  const paintingSources: CatalogContentSource[] = paintings
+    .filter((painting) => painting.status !== 'sold')
+    .map((painting) => ({
+      type: 'painting',
+      id: painting.id,
+      title: painting.title,
+      topic: `Картина «${painting.title}» в интерьере`,
+      idea: [
+        painting.keyIdea,
+        painting.mood ? `настроение: ${painting.mood}` : '',
+        painting.size ? `размер: ${painting.size}` : '',
+        painting.technique ? `техника: ${painting.technique}` : '',
+        painting.suitableInterior ? `подходит для: ${painting.suitableInterior}` : '',
+        painting.spaceContribution ? `добавляет пространству: ${painting.spaceContribution}` : '',
+        painting.price ? `цена: ${painting.price} ₽` : '',
+      ]
+        .filter(Boolean)
+        .join('; '),
+      cta: painting.cta || 'Напиши в Direct, если хочешь увидеть картину в своём интерьере',
+      seoKeys: [painting.title, 'картина маслом', 'картина в интерьер', ...painting.colors, painting.mood].filter(Boolean),
+      notes: `Источник: картина «${painting.title}». Фото/URL: ${painting.imageUrl ? 'добавлено' : 'не добавлено'}.`,
+      preferredGoals: ['trust', 'lead', 'sale'],
+      preferredFormats: ['Instagram Post', 'Instagram Carousel', 'Instagram Stories', 'TikTok Slideshow'],
+      preferredPlatforms: ['Instagram', 'TikTok'],
+      series: 'paintings-for-sale',
+    }));
+
+  const serviceSources: CatalogContentSource[] = services.map((service) => ({
+    type: 'service',
+    id: service.id,
+    title: service.title,
+    topic: `Услуга: ${service.title}`,
+    idea: [
+      service.description,
+      service.targetAudience ? `для кого: ${service.targetAudience}` : '',
+      service.includes.length > 0 ? `что входит: ${service.includes.join(', ')}` : '',
+      service.timeline ? `сроки: ${service.timeline}` : '',
+      service.price ? `цена: ${service.price}` : '',
+      service.result ? `результат: ${service.result}` : '',
+    ]
+      .filter(Boolean)
+      .join('; '),
+    cta: service.cta || 'Напиши в Direct, расскажу подробнее об услуге',
+    seoKeys: [service.title, 'услуга художника', 'интерьерный скетч', service.targetAudience, ...service.includes].filter(Boolean),
+    notes: `Источник: услуга «${service.title}». ${service.clientRequirements.length > 0 ? `Нужно от клиента: ${service.clientRequirements.join(', ')}` : ''}`,
+    preferredGoals: ['trust', 'lead', 'sale'],
+    preferredFormats: ['Instagram Carousel', 'Instagram Reels', 'Instagram Stories', 'TikTok Video'],
+    preferredPlatforms: ['Instagram', 'TikTok'],
+    series: 'how-to-order',
+  }));
+
+  return [...paintingSources, ...serviceSources];
+};
+
+const shouldUseCatalogSource = (sourceCount: number, goal: ContentGoal, postIndex: number): boolean => {
+  if (sourceCount === 0) return false;
+  if (goal === 'lead' || goal === 'sale' || goal === 'trust') return true;
+  return postIndex % 4 === 2;
+};
+
+
+const buildWeightedGoals = (balance?: ContentBalanceMatrix): ContentGoal[] => {
+  if (!balance) return [];
+  const goals = Object.entries(balance).flatMap(([goal, percent]) =>
+    Array.from({ length: Math.max(0, Math.round(Number(percent) / 5)) }, () => goal as ContentGoal)
+  );
+  return goals.length > 0 ? goals : [];
+};
+
+const buildRubricTopicRules = (rubrics: Rubric[] = []): TopicRule[] =>
+  rubrics
+    .filter((rubric) => rubric.enabled)
+    .map((rubric) => ({
+      topic: rubric.title,
+      series: 'artist-process' as ContentSeries,
+      formats: rubric.formats,
+      platforms: rubric.platforms,
+      funnelStages: rubric.goals.map(getFunnelStageForGoal),
+      hookTypes: rubric.hookTypes,
+    }));
+
 
 const TOPIC_RULES: TopicRule[] = [
   {
@@ -230,13 +349,21 @@ const selectRandomWithGuard = <T extends string>(
 export interface MonthGeneratorParams {
   month: string; // YYYY-MM
   settings: GeneratorSettings;
+  paintings?: Painting[];
+  services?: Service[];
+  contentBalance?: ContentBalanceMatrix;
+  rubrics?: Rubric[];
 }
 
 export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
-  const { month, settings } = params;
+  const { month, settings, paintings = [], services = [], contentBalance, rubrics = [] } = params;
   const { defaultDays, defaultTimes, defaultPlatforms, defaultGoals } = settings;
+  const weightedGoals = buildWeightedGoals(contentBalance);
+  const goalRotation = weightedGoals.length > 0 ? weightedGoals : defaultGoals;
+  const topicRules = [...buildRubricTopicRules(rubrics), ...TOPIC_RULES];
 
   const posts: Post[] = [];
+  const catalogSources = buildCatalogSources(paintings, services);
   const guard = new RepetitionGuard();
 
   const [year, monthNum] = month.split('-').map(Number);
@@ -250,6 +377,9 @@ export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
     lastDay: lastDay.toISOString(),
     days: defaultDays,
     times: defaultTimes,
+    catalogSources: catalogSources.length,
+    balanceGoals: goalRotation,
+    enabledRubrics: rubrics.filter((rubric) => rubric.enabled).length,
   });
 
   const dayNameToNum: Record<string, number> = {
@@ -283,29 +413,51 @@ export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
 
   dates.forEach((date) => {
     defaultTimes.forEach((time) => {
-      const goal = defaultGoals[postIndex % defaultGoals.length];
+      const goal = goalRotation[postIndex % goalRotation.length];
       const funnelStage = getFunnelStageForGoal(goal);
 
-      const compatibleTopics = TOPIC_RULES.filter(
+      const source = shouldUseCatalogSource(catalogSources.length, goal, postIndex)
+        ? catalogSources[postIndex % catalogSources.length]
+        : undefined;
+
+      const compatibleTopics = topicRules.filter(
         (rule) => rule.funnelStages.includes(funnelStage) && rule.platforms.some((platform) => defaultPlatforms.includes(platform))
       );
-      const funnelTopics = TOPIC_RULES.filter((rule) => rule.funnelStages.includes(funnelStage));
-      const suitableTopics = compatibleTopics.length > 0 ? compatibleTopics : funnelTopics.length > 0 ? funnelTopics : TOPIC_RULES;
-      const topicRule = selectTopicRuleWithGuard(suitableTopics, guard);
+      const funnelTopics = topicRules.filter((rule) => rule.funnelStages.includes(funnelStage));
+      const suitableTopics = compatibleTopics.length > 0 ? compatibleTopics : funnelTopics.length > 0 ? funnelTopics : topicRules;
+      const topicRule = source ? undefined : selectTopicRuleWithGuard(suitableTopics, guard);
 
-      const matchingPlatforms = topicRule.platforms.filter((platform) => defaultPlatforms.includes(platform));
-      const platform = selectRandom(matchingPlatforms.length > 0 ? matchingPlatforms : topicRule.platforms);
+      const sourcePlatforms = source?.preferredPlatforms.filter((platform) => defaultPlatforms.includes(platform)) || [];
+      const matchingPlatforms = topicRule?.platforms.filter((platform) => defaultPlatforms.includes(platform)) || [];
+      const platform = source
+        ? selectRandom(sourcePlatforms.length > 0 ? sourcePlatforms : defaultPlatforms)
+        : selectRandom(matchingPlatforms.length > 0 ? matchingPlatforms : topicRule!.platforms);
 
-      const platformFormats = topicRule.formats.filter((format) =>
+      const sourceFormats = source?.preferredFormats.filter((format) =>
         platform === 'TikTok' ? format.startsWith('TikTok') : format.startsWith('Instagram')
+      ) || [];
+      const platformFormats = topicRule?.formats.filter((format) =>
+        platform === 'TikTok' ? format.startsWith('TikTok') : format.startsWith('Instagram')
+      ) || [];
+      const format = selectRandomWithGuard(
+        source
+          ? sourceFormats.length > 0
+            ? sourceFormats
+            : source.preferredFormats
+          : platformFormats.length > 0
+            ? platformFormats
+            : topicRule!.formats,
+        guard,
+        'format'
       );
-      const format = selectRandomWithGuard(platformFormats.length > 0 ? platformFormats : topicRule.formats, guard, 'format');
 
-      const hookType = selectRandomWithGuard(topicRule.hookTypes, guard, 'hook');
-      const ctaOptions = CTA_TEMPLATES[goal] || CTA_TEMPLATES.reach;
+      const hookTypes = source ? (source.type === 'painting' ? ['question', 'before-after', 'personal-story'] as HookType[] : ['how-to', 'question', 'process'] as HookType[]) : topicRule!.hookTypes;
+      const hookType = selectRandomWithGuard(hookTypes, guard, 'hook');
+      const ctaOptions = source ? [source.cta, ...(CTA_TEMPLATES[goal] || CTA_TEMPLATES.reach)] : CTA_TEMPLATES[goal] || CTA_TEMPLATES.reach;
       const cta = selectRandomWithGuard(ctaOptions, guard, 'cta');
+      const topic = source?.topic || topicRule!.topic;
 
-      guard.add(topicRule.topic, 'topic');
+      guard.add(topic, 'topic');
       guard.add(goal, 'goal');
       guard.add(format, 'format');
       guard.add(hookType, 'hook');
@@ -320,18 +472,22 @@ export const generateMonthPlan = (params: MonthGeneratorParams): Post[] => {
         goal,
         funnelStage,
         mainMetric: getMainMetricForGoal(goal),
-        contentSeries: topicRule.series,
-        topic: topicRule.topic,
-        idea: `${topicRule.topic} - ${format}`,
+        contentSeries: source?.series || topicRule!.series,
+        topic,
+        idea: source?.idea || `${topicRule!.topic} - ${format}`,
         hookType,
         hookVariants: [],
         visualScenario: '',
         textStructure: '',
         cta,
-        seoKeys: [],
+        seoKeys: source?.seoKeys || [],
         lsiKeys: [],
-        hashtags: [],
+        hashtags: source?.seoKeys.slice(0, 5).map(normalizeHashTag) || [],
         status: 'idea',
+        notes: source?.notes,
+        sourceType: source?.type,
+        sourceId: source?.id,
+        sourceTitle: source?.title,
       };
 
       posts.push(post);

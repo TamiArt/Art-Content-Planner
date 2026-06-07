@@ -10,6 +10,9 @@ import Analytics from '../pages/Analytics';
 import Paintings from '../pages/Paintings';
 import Services from '../pages/Services';
 import Offers from '../pages/Offers';
+import Campaigns from '../pages/Campaigns';
+import HookLibrary from '../pages/HookLibrary';
+import Rubrics from '../pages/Rubrics';
 import Settings from '../pages/Settings';
 import DebugPanel from '../pages/DebugPanel';
 
@@ -28,6 +31,9 @@ export const router = createBrowserRouter([
       { path: 'paintings', Component: Paintings },
       { path: 'services', Component: Services },
       { path: 'offers', Component: Offers },
+      { path: 'campaigns', Component: Campaigns },
+      { path: 'hooks', Component: HookLibrary },
+      { path: 'rubrics', Component: Rubrics },
       { path: 'settings', Component: Settings },
       ...(import.meta.env.DEV ? [{ path: 'debug', Component: DebugPanel }] : []),
     ],

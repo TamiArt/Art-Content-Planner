@@ -12,6 +12,7 @@ export const buildPromptForPost = (post: Post, settings: AppSettings): string =>
   const formatContext = getFormatContext(post.format);
   const goalContext = getGoalContext(post.goal);
   const audienceContext = getAudienceContext(post.funnelStage);
+  const sourceContext = getSourceContext(post);
 
   const prompt = `Ты профессиональный контент-мейкер для художника, специализирующегося на интерьерных скетчах и картинах маслом.
 
@@ -21,7 +22,10 @@ export const buildPromptForPost = (post: Post, settings: AppSettings): string =>
 - Цель контента: ${goalContext}
 - Этап воронки: ${audienceContext}
 - Тема: ${post.topic}
-- Идея: ${post.idea}
+- Идея: ${post.idea}${sourceContext}
+- Первый кадр: ${post.firstFrameDescription || 'предложи сильный визуальный scroll-stopper'}
+- Текст на экране: ${post.onScreenHookText || post.selectedHook || 'предложи короткий текст'}
+- Search SEO: ${(post.searchKeywords || post.seoKeys).join(', ') || 'подбери по теме'}
 
 **Стиль и тон:**
 ${style.tone.map((t) => `- ${t}`).join('\n')}
@@ -41,38 +45,49 @@ ${style.focus.map((f) => `- ${f}`).join('\n')}
    - Без банальностей
    - С фокусом на визуальное/эмоциональное
 
-2. **Визуальный сценарий** (по кадрам/слайдам):
+2. **Первые кадры и удержание для Reels/TikTok:**
+   - Первый кадр: что видно визуально
+   - Текст на экране в первые 1-2 секунды
+   - План первых 3 секунд: ${post.firstThreeSecondsPlan || 'визуальный контраст → текст-хук → обещание пользы'}
+   - Retention-план: ${post.retentionPlan || 'смена кадра/детали каждые 2-3 секунды'}
+
+3. **Визуальный сценарий** (по кадрам/слайдам):
    - Что показывать на экране
    - Какие детали подчеркнуть
    - Цвета, свет, композицию
    - Движение камеры (для видео)
 
-3. **Структура текста/сценария озвучки:**
+4. **Структура текста/сценария озвучки:**
    - Хук (первая строка)
    - Основная мысль (2-3 предложения)
    - Детали/польза/эмоция
    - Завершение
    - Длина: ${post.platform === 'TikTok' ? '50-100 слов' : '80-150 слов'}
 
-4. **Call-to-Action (CTA):**
+5. **Call-to-Action (CTA):**
    - Естественный, не агрессивный
    - Направление: ${post.cta || 'по контексту'}
 
-5. **Ключевые слова и хэштеги:**
+6. **Search SEO, ключевые слова и хэштеги:**
    - LSI-ключи для естественного встраивания
    - Ровно 5 хэштегов (не больше, не меньше)
    - Релевантные теме: ${post.topic}
+   - Вставь Search SEO в первую строку описания: ${post.captionFirstLine || 'предложи первую строку'}
+   - Ключи для текста на экране: ${(post.onScreenTextKeywords || []).join(', ') || 'подбери 2-3 ключа'}
+   - Alt/визуальное описание: ${post.altText || 'предложи краткое описание визуала'}
 
-6. **Короткая версия описания:**
+7. **Короткая версия описания:**
    - 1-2 предложения для подписи/описания
    - С ключевыми словами
 
 **Формат ответа:**
 Дай структурированный ответ с четкими разделами:
 - ХУКИ (5 вариантов)
+- ПЕРВЫЕ КАДРЫ И RETENTION
 - ВИЗУАЛЬНЫЙ СЦЕНАРИЙ
 - ТЕКСТ/СЦЕНАРИЙ
 - CTA
+- SEARCH SEO
 - LSI-КЛЮЧИ
 - ХЭШТЕГИ (ровно 5)
 - КОРОТКОЕ ОПИСАНИЕ
@@ -80,6 +95,16 @@ ${style.focus.map((f) => `- ${f}`).join('\n')}
 Помни: контент должен быть живым, экспертным, визуальным, без воды и с фокусом на интерьер, свет, цвет, глубину и настроение.`;
 
   return prompt;
+};
+
+
+const getSourceContext = (post: Post): string => {
+  if (!post.sourceType && !post.sourceTitle && !post.notes) return '';
+
+  const sourceTypeLabel = post.sourceType === 'painting' ? 'картина' : post.sourceType === 'service' ? 'услуга' : 'источник';
+  return `
+- Источник контента: ${sourceTypeLabel}${post.sourceTitle ? ` «${post.sourceTitle}»` : ''}${post.notes ? `
+- Детали источника: ${post.notes}` : ''}`;
 };
 
 const getFormatContext = (format: string): string => {

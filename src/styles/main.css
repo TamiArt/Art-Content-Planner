@@ -1696,3 +1696,386 @@ body {
     max-width: 100px;
   }
 }
+
+.idea-form {
+  margin-bottom: 1.5rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.form-date-time-inline > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-date-time-inline input {
+  min-width: 0;
+}
+
+.idea-card-actions,
+.idea-convert-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.idea-card-actions {
+  flex-shrink: 0;
+}
+
+.idea-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.idea-meta span {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-light);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.idea-convert-actions {
+  border-top: 1px solid var(--color-border);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.idea-convert-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .form-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .form-grid-2,
+  .form-grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .form-date-time-inline > div,
+  .idea-convert-actions {
+    flex-direction: column;
+  }
+}
+
+/* Mobile safety layer: keep cards, forms and calendars from overlapping on narrow screens. */
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+.main-content,
+.card,
+.post-details,
+.topic-cell,
+.format-cell,
+.idea-card,
+.painting-card,
+.service-card,
+.offer-card,
+.week-post-card,
+.kanban-card {
+  min-width: 0;
+}
+
+.catalog-image-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+.catalog-image-preview img {
+  width: min(220px, 100%);
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: var(--radius);
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.375rem;
+  color: var(--color-text-light);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .page-header,
+  .review-actions,
+  .month-controls,
+  .catalog-card-header,
+  .idea-header,
+  .card-header,
+  .modal-header {
+    align-items: stretch;
+  }
+
+  .header-actions,
+  .form-actions,
+  .view-controls,
+  .catalog-card-actions,
+  .idea-card-actions,
+  .week-post-header,
+  .post-meta {
+    flex-wrap: wrap;
+  }
+
+  .calendar-month,
+  .calendar-list,
+  .kanban-board,
+  .review-table-wrapper,
+  .posts-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .calendar-header,
+  .calendar-grid {
+    min-width: 760px;
+  }
+
+  .calendar-day {
+    aspect-ratio: auto;
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --spacing: 0.75rem;
+  }
+
+  .main-content {
+    padding: 4.5rem 0.75rem 1rem;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .page-header .btn,
+  .header-actions .btn,
+  .form-actions .btn,
+  .settings-actions .btn,
+  .time-input-row .btn,
+  .view-controls .btn,
+  .review-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .header-actions,
+  .form-actions,
+  .view-controls,
+  .month-controls,
+  .time-input-row,
+  .metric,
+  .ranking-item,
+  .post-item,
+  .list-post-item,
+  .catalog-card-header,
+  .idea-header,
+  .catalog-image-preview {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card,
+  .stat-card,
+  .painting-card,
+  .service-card,
+  .offer-card,
+  .week-day,
+  .kanban-column {
+    padding: 1rem;
+  }
+
+  .content-grid,
+  .stats-grid,
+  .summary-grid,
+  .analytics-summary,
+  .paintings-grid,
+  .services-list,
+  .offers-list,
+  .ideas-grid,
+  .kanban-board,
+  .calendar-week {
+    grid-template-columns: 1fr;
+  }
+
+  .checkbox-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .checkbox-label {
+    width: 100%;
+    padding: 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+  }
+
+  .post-date {
+    min-width: 100%;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 0.5rem;
+  }
+
+  .modal-content {
+    max-height: calc(100vh - 1rem);
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 1rem;
+  }
+
+  .toast {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: 0.75rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .main-content {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .btn {
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .calendar-header,
+  .calendar-grid {
+    min-width: 680px;
+  }
+
+  .post-mini-topic,
+  .week-post-card h4,
+  .painting-details p,
+  .service-details p,
+  .offer-details p,
+  .idea-description {
+    overflow-wrap: anywhere;
+  }
+}
+
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.workflow-card,
+.hook-card,
+.rubric-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+.story-slide-list {
+  margin: 0.75rem 0 0 1.25rem;
+}
+
+.story-slide-list li {
+  margin-bottom: 0.75rem;
+}
+
+.catalog-source-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+  padding: 1rem 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.balance-item {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+.balance-item label {
+  font-weight: 700;
+}
+
+.balance-item input[type='range'] {
+  width: 100%;
+}
+
+.rubric-toggle {
+  width: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .catalog-source-actions,
+  .balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-source-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

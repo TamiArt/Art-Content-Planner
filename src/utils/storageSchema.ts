@@ -1,11 +1,14 @@
 import type {
   AppData,
   AppSettings,
+  ContentBalanceMatrix,
+  ContentCampaign,
   ContentGoal,
   ContentSeries,
   Format,
   FunnelStage,
   GeneratorSettings,
+  HookLibraryItem,
   HookType,
   Idea,
   MonthlyPlan,
@@ -15,10 +18,13 @@ import type {
   Post,
   PostAnalytics,
   PostStatus,
+  Rubric,
   SEOCluster,
   Service,
+  SourceType,
+  StorySequence,
 } from '../types';
-import { DEFAULT_SEO_CLUSTERS, DEFAULT_SETTINGS } from '../types';
+import { DEFAULT_CONTENT_BALANCE, DEFAULT_RUBRICS, DEFAULT_SEO_CLUSTERS, DEFAULT_SETTINGS } from '../types';
 
 const PLATFORMS = ['TikTok', 'Instagram'] as const satisfies readonly Platform[];
 const FORMATS = [
@@ -54,12 +60,19 @@ const HOOK_TYPES = [
   'how-to',
 ] as const satisfies readonly HookType[];
 const PAINTING_STATUSES = ['available', 'sold', 'custom-order'] as const;
+const SOURCE_TYPES = ['painting', 'service', 'offer'] as const satisfies readonly SourceType[];
+const CAMPAIGN_GOALS = ['sell-painting', 'promote-service', 'launch-offer', 'warm-audience'] as const;
+const CAMPAIGN_STATUSES = ['draft', 'active', 'completed'] as const;
+const HOOK_STATUSES = ['testing', 'works', 'weak'] as const;
+const STORY_GOALS = ['warm-up', 'poll', 'direct', 'sale', 'behind-scenes'] as const;
+const STORY_STICKERS = ['poll', 'question', 'quiz', 'link', 'none'] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
 
 const isEnumValue = <T extends string>(values: readonly T[], value: unknown): value is T =>
   isString(value) && values.includes(value as T);
@@ -83,6 +96,13 @@ const readOptionalNumber = (source: Record<string, unknown>, key: string): numbe
   if (value === undefined) return undefined;
   if (isNumber(value)) return value;
   throw new Error(`Invalid ${key}: expected number`);
+};
+
+const readBoolean = (source: Record<string, unknown>, key: string, fallback = false): boolean => {
+  const value = source[key];
+  if (value === undefined) return fallback;
+  if (isBoolean(value)) return value;
+  throw new Error(`Invalid ${key}: expected boolean`);
 };
 
 const readStringArray = (source: Record<string, unknown>, key: string, fallback: string[] = []): string[] => {
@@ -174,6 +194,21 @@ const parsePost = (value: unknown): Post => {
     status: readEnum(value, 'status', POST_STATUSES, 'idea'),
     notes: readOptionalString(value, 'notes'),
     analytics: parseAnalytics(value.analytics),
+    sourceType: value.sourceType === undefined ? undefined : readEnum(value, 'sourceType', SOURCE_TYPES, 'painting'),
+    sourceId: readOptionalString(value, 'sourceId'),
+    sourceTitle: readOptionalString(value, 'sourceTitle'),
+    campaignId: readOptionalString(value, 'campaignId'),
+    storySequenceId: readOptionalString(value, 'storySequenceId'),
+    repackagedFromPostId: readOptionalString(value, 'repackagedFromPostId'),
+    firstFrameDescription: readOptionalString(value, 'firstFrameDescription'),
+    onScreenHookText: readOptionalString(value, 'onScreenHookText'),
+    firstThreeSecondsPlan: readOptionalString(value, 'firstThreeSecondsPlan'),
+    retentionPlan: readOptionalString(value, 'retentionPlan'),
+    searchKeywords: readStringArray(value, 'searchKeywords'),
+    onScreenTextKeywords: readStringArray(value, 'onScreenTextKeywords'),
+    captionFirstLine: readOptionalString(value, 'captionFirstLine'),
+    altText: readOptionalString(value, 'altText'),
+    contentBalanceSlot: value.contentBalanceSlot === undefined ? undefined : readEnum(value, 'contentBalanceSlot', CONTENT_GOALS, 'reach'),
   };
 };
 
@@ -185,6 +220,11 @@ const parseIdea = (value: unknown): Idea => {
     title: readString(value, 'title'),
     description: readString(value, 'description'),
     tags: readStringArray(value, 'tags'),
+    platform: value.platform === undefined ? undefined : readEnum(value, 'platform', PLATFORMS, 'Instagram'),
+    format: value.format === undefined ? undefined : readEnum(value, 'format', FORMATS, 'Instagram Post'),
+    goal: value.goal === undefined ? undefined : readEnum(value, 'goal', CONTENT_GOALS, 'reach'),
+    plannedDate: readOptionalString(value, 'plannedDate'),
+    plannedTime: readOptionalString(value, 'plannedTime'),
     convertedToPostId: readOptionalString(value, 'convertedToPostId'),
   };
 };
@@ -288,6 +328,99 @@ const parseMonthlyPlan = (value: unknown): MonthlyPlan => {
   };
 };
 
+const parseCampaign = (value: unknown): ContentCampaign => {
+  if (!isRecord(value)) throw new Error('Invalid campaign: expected object');
+  return {
+    id: readString(value, 'id'),
+    title: readString(value, 'title'),
+    goal: readEnum(value, 'goal', CAMPAIGN_GOALS, 'warm-audience'),
+    sourceType: value.sourceType === undefined ? undefined : readEnum(value, 'sourceType', SOURCE_TYPES, 'painting'),
+    sourceId: readOptionalString(value, 'sourceId'),
+    sourceTitle: readOptionalString(value, 'sourceTitle'),
+    startDate: readString(value, 'startDate'),
+    endDate: readString(value, 'endDate'),
+    postIds: readStringArray(value, 'postIds'),
+    storySequenceIds: readStringArray(value, 'storySequenceIds'),
+    targetMetric: readString(value, 'targetMetric'),
+    status: readEnum(value, 'status', CAMPAIGN_STATUSES, 'draft'),
+    createdAt: readString(value, 'createdAt'),
+  };
+};
+
+const parseHookLibraryItem = (value: unknown): HookLibraryItem => {
+  if (!isRecord(value)) throw new Error('Invalid hook: expected object');
+  return {
+    id: readString(value, 'id'),
+    text: readString(value, 'text'),
+    hookType: readEnum(value, 'hookType', HOOK_TYPES, 'question'),
+    platform: readEnum(value, 'platform', PLATFORMS, 'Instagram'),
+    format: readEnum(value, 'format', FORMATS, 'Instagram Reels'),
+    sourcePostId: readOptionalString(value, 'sourcePostId'),
+    avgEngagementRate: readOptionalNumber(value, 'avgEngagementRate'),
+    avgRetentionRate: readOptionalNumber(value, 'avgRetentionRate'),
+    usageCount: readOptionalNumber(value, 'usageCount') ?? 0,
+    status: readEnum(value, 'status', HOOK_STATUSES, 'testing'),
+    notes: readOptionalString(value, 'notes'),
+    createdAt: readString(value, 'createdAt'),
+  };
+};
+
+const parseStorySlide = (value: unknown) => {
+  if (!isRecord(value)) throw new Error('Invalid story slide: expected object');
+  return {
+    id: readString(value, 'id'),
+    order: readOptionalNumber(value, 'order') ?? 1,
+    frame: readString(value, 'frame'),
+    text: readString(value, 'text'),
+    sticker: value.sticker === undefined ? undefined : readEnum(value, 'sticker', STORY_STICKERS, 'none'),
+    cta: readOptionalString(value, 'cta'),
+  };
+};
+
+const parseStorySequence = (value: unknown): StorySequence => {
+  if (!isRecord(value)) throw new Error('Invalid story sequence: expected object');
+  return {
+    id: readString(value, 'id'),
+    title: readString(value, 'title'),
+    platform: readEnum(value, 'platform', PLATFORMS, 'Instagram'),
+    goal: readEnum(value, 'goal', STORY_GOALS, 'warm-up'),
+    date: readString(value, 'date'),
+    sourceType: value.sourceType === undefined ? undefined : readEnum(value, 'sourceType', SOURCE_TYPES, 'painting'),
+    sourceId: readOptionalString(value, 'sourceId'),
+    sourceTitle: readOptionalString(value, 'sourceTitle'),
+    campaignId: readOptionalString(value, 'campaignId'),
+    slides: readObjectArray(value, 'slides', parseStorySlide),
+    createdAt: readString(value, 'createdAt'),
+  };
+};
+
+const parseRubric = (value: unknown): Rubric => {
+  if (!isRecord(value)) throw new Error('Invalid rubric: expected object');
+  return {
+    id: readString(value, 'id'),
+    title: readString(value, 'title'),
+    description: readString(value, 'description'),
+    goals: readEnumArray(value, 'goals', CONTENT_GOALS, ['reach']),
+    platforms: readEnumArray(value, 'platforms', PLATFORMS, ['Instagram']),
+    formats: readEnumArray(value, 'formats', FORMATS, ['Instagram Post']),
+    hookTypes: readEnumArray(value, 'hookTypes', HOOK_TYPES, ['question']),
+    frequencyPerMonth: readOptionalNumber(value, 'frequencyPerMonth') ?? 1,
+    cta: readString(value, 'cta'),
+    enabled: readBoolean(value, 'enabled', true),
+  };
+};
+
+const parseContentBalance = (value: unknown): ContentBalanceMatrix => {
+  if (!isRecord(value)) return DEFAULT_CONTENT_BALANCE;
+  return {
+    reach: readOptionalNumber(value, 'reach') ?? DEFAULT_CONTENT_BALANCE.reach,
+    engagement: readOptionalNumber(value, 'engagement') ?? DEFAULT_CONTENT_BALANCE.engagement,
+    trust: readOptionalNumber(value, 'trust') ?? DEFAULT_CONTENT_BALANCE.trust,
+    lead: readOptionalNumber(value, 'lead') ?? DEFAULT_CONTENT_BALANCE.lead,
+    sale: readOptionalNumber(value, 'sale') ?? DEFAULT_CONTENT_BALANCE.sale,
+  };
+};
+
 export const parseAppData = (value: unknown, storageVersion: string): AppData => {
   if (!isRecord(value)) {
     throw new Error('Invalid app data: expected object');
@@ -306,6 +439,11 @@ export const parseAppData = (value: unknown, storageVersion: string): AppData =>
     paintings: readObjectArray(value, 'paintings', parsePainting),
     services: readObjectArray(value, 'services', parseService),
     offers: readObjectArray(value, 'offers', parseOffer),
+    campaigns: readObjectArray(value, 'campaigns', parseCampaign),
+    hookLibrary: readObjectArray(value, 'hookLibrary', parseHookLibraryItem),
+    storySequences: readObjectArray(value, 'storySequences', parseStorySequence),
+    rubrics: readObjectArray(value, 'rubrics', parseRubric, DEFAULT_RUBRICS),
+    contentBalance: parseContentBalance(value.contentBalance),
     seoCluster: readObjectArray(value, 'seoCluster', parseSEOCluster, DEFAULT_SEO_CLUSTERS),
     lastUpdated: readString(value, 'lastUpdated', new Date().toISOString()),
   };

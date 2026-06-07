@@ -61,6 +61,10 @@ const Settings: React.FC = () => {
             <li>Картин: {data.paintings.length}</li>
             <li>Услуг: {data.services.length}</li>
             <li>Офферов: {data.offers.length}</li>
+            <li>Кампаний: {data.campaigns.length}</li>
+            <li>Хуков: {data.hookLibrary.length}</li>
+            <li>Stories-цепочек: {data.storySequences.length}</li>
+            <li>Рубрик: {data.rubrics.length}</li>
             <li>Месячных планов: {data.monthlyPlans.length}</li>
           </ul>
           <p>

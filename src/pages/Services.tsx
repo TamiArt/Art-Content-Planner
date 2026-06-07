@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAppContext } from '../context/AppContext';
 import type { Service } from '../types';
-import { Briefcase, Edit, Plus, Trash2 } from 'lucide-react';
+import { Briefcase, Edit, Flame, Plus, Trash2 } from 'lucide-react';
+import { createServiceWarmupCampaign } from '../utils/contentWorkflows';
 
 type ServiceForm = Omit<Service, 'id' | 'includes' | 'clientRequirements'> & {
   includes: string;
@@ -49,7 +51,8 @@ const serviceFromForm = (form: ServiceForm, id: string): Service => ({
 });
 
 const Services: React.FC = () => {
-  const { data, addService, updateService, deleteService } = useAppContext();
+  const navigate = useNavigate();
+  const { data, addService, updateService, deleteService, addPosts, updateData } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ServiceForm>(emptyServiceForm());
@@ -88,6 +91,17 @@ const Services: React.FC = () => {
       deleteService(id);
       if (editingId === id) resetForm();
     }
+  };
+
+  const handleCreateWarmup = (service: Service) => {
+    const workflow = createServiceWarmupCampaign(service);
+    addPosts(workflow.posts);
+    updateData({
+      campaigns: [...data.campaigns, workflow.campaign],
+      storySequences: [...data.storySequences, ...workflow.storySequences],
+    });
+    alert('Создан прогрев услуги: посты, кампания и Stories-цепочка');
+    navigate('/campaigns');
   };
 
   return (
@@ -180,6 +194,11 @@ const Services: React.FC = () => {
                 </div>
               </div>
               {service.description && <p>{service.description}</p>}
+              <div className="catalog-source-actions">
+                <button className="btn btn-primary" onClick={() => handleCreateWarmup(service)}>
+                  <Flame size={16} /> Создать прогрев услуги
+                </button>
+              </div>
               <div className="service-details">
                 <p><strong>Для кого:</strong> {service.targetAudience || '—'}</p>
                 <p><strong>Сроки:</strong> {service.timeline || '—'}</p>

@@ -21,7 +21,8 @@ const CalendarView: React.FC = () => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - startDate.getDay());
+    const mondayOffset = (firstDay.getDay() + 6) % 7;
+    startDate.setDate(startDate.getDate() - mondayOffset);
 
     const days = [];
     const currentDate = new Date(startDate);
@@ -52,7 +53,7 @@ const CalendarView: React.FC = () => {
     return (
       <div className="calendar-month">
         <div className="calendar-header">
-          {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'].map((day) => (
+          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
             <div key={day} className="calendar-day-name">
               {day}
             </div>
@@ -97,7 +98,8 @@ const CalendarView: React.FC = () => {
   const renderWeekView = () => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+    const mondayOffset = (today.getDay() + 6) % 7;
+    startOfWeek.setDate(today.getDate() - mondayOffset);
 
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
