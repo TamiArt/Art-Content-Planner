@@ -1,0 +1,171 @@
+import React from 'react';
+import { useAppContext } from '../context/AppContext';
+import { Link } from 'react-router';
+import { getAnalyticsSummary } from '../utils/analytics';
+import { Calendar, TrendingUp, FileText, Lightbulb } from 'lucide-react';
+
+const Dashboard: React.FC = () => {
+  const { data } = useAppContext();
+  const { posts } = data;
+
+  // Debug logging
+  console.log('Dashboard - Total posts:', posts.length);
+  if (posts.length > 0) {
+    console.log('Sample post:', posts[0]);
+  }
+
+  const upcomingPosts = posts
+    .filter((p) => new Date(p.date) >= new Date() && p.status !== 'published')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 5);
+
+  const analytics = getAnalyticsSummary(posts);
+
+  const statusCounts = {
+    idea: posts.filter((p) => p.status === 'idea').length,
+    'prompt-ready': posts.filter((p) => p.status === 'prompt-ready').length,
+    'text-ready': posts.filter((p) => p.status === 'text-ready').length,
+    'visual-ready': posts.filter((p) => p.status === 'visual-ready').length,
+    scheduled: posts.filter((p) => p.status === 'scheduled').length,
+    published: posts.filter((p) => p.status === 'published').length,
+  };
+
+  return (
+    <div className="dashboard">
+      <header className="dashboard-header">
+        <h1>Art Content Planner</h1>
+        <p>Личный контент-оператор для художника</p>
+      </header>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <FileText size={32} />
+          <div>
+            <h3>{posts.length}</h3>
+            <p>Всего постов</p>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <Calendar size={32} />
+          <div>
+            <h3>{upcomingPosts.length}</h3>
+            <p>Предстоящие</p>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <TrendingUp size={32} />
+          <div>
+            <h3>{analytics.publishedPosts}</h3>
+            <p>Опубликовано</p>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <Lightbulb size={32} />
+          <div>
+            <h3>{data.ideas.length}</h3>
+            <p>Идей</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="content-grid">
+        <section className="card upcoming-section">
+          <h2>Ближайшие публикации</h2>
+          {upcomingPosts.length === 0 ? (
+            <p className="empty-state">Нет запланированных постов</p>
+          ) : (
+            <div className="post-list">
+              {upcomingPosts.map((post) => (
+                <Link to={`/posts/${post.id}`} key={post.id} className="post-item">
+                  <div className="post-date">
+                    <strong>{new Date(post.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</strong>
+                    <span>{post.time}</span>
+                  </div>
+                  <div className="post-details">
+                    <h4>{post.topic}</h4>
+                    <div className="post-meta">
+                      <span className={`badge badge-${post.platform.toLowerCase()}`}>{post.platform}</span>
+                      <span className={`badge badge-${post.status}`}>{post.status}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+          <Link to="/calendar" className="btn btn-secondary">
+            Открыть календарь
+          </Link>
+        </section>
+
+        <section className="card status-section">
+          <h2>Статусы постов</h2>
+          <div className="status-bars">
+            {Object.entries(statusCounts).map(([status, count]) => (
+              <div key={status} className="status-bar">
+                <div className="status-label">
+                  <span>{status}</span>
+                  <span className="status-count">{count}</span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className={`progress-fill status-${status}`}
+                    style={{ width: `${(count / posts.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card analytics-preview">
+          <h2>Аналитика</h2>
+          {analytics.publishedPosts === 0 ? (
+            <p className="empty-state">Нет опубликованных постов для аналитики</p>
+          ) : (
+            <div className="analytics-summary">
+              <div className="metric">
+                <span>Средний Engagement Rate</span>
+                <strong>{analytics.avgEngagementRate.toFixed(2)}%</strong>
+              </div>
+              <div className="metric">
+                <span>Средний Save Rate</span>
+                <strong>{analytics.avgSaveRate.toFixed(2)}%</strong>
+              </div>
+              <div className="metric">
+                <span>Просмотры</span>
+                <strong>{analytics.totalViews.toLocaleString()}</strong>
+              </div>
+              <div className="metric">
+                <span>Заявки</span>
+                <strong>{analytics.totalLeads}</strong>
+              </div>
+            </div>
+          )}
+          <Link to="/analytics" className="btn btn-secondary">
+            Подробная аналитика
+          </Link>
+        </section>
+
+        <section className="card quick-actions">
+          <h2>Быстрые действия</h2>
+          <div className="action-buttons">
+            <Link to="/generate" className="btn btn-primary">
+              Сгенерировать месяц
+            </Link>
+            <Link to="/ideas" className="btn btn-secondary">
+              Добавить идею
+            </Link>
+            <Link to="/posts/new" className="btn btn-secondary">
+              Создать пост
+            </Link>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
