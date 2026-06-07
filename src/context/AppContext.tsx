@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from '../types';
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
+import { logger } from '../utils/logger';
 
 interface AppContextValue {
   data: AppData;
@@ -55,13 +56,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addPosts = (posts: Post[]) => {
-    console.log('addPosts called with posts:', posts.length);
+    logger.debug('addPosts called with posts:', posts.length);
     setData((prevData) => {
-      console.log('addPosts - Current posts in state:', prevData.posts.length);
+      logger.debug('addPosts - Current posts in state:', prevData.posts.length);
       const newData = { ...prevData, posts: [...prevData.posts, ...posts] };
-      console.log('addPosts - New total will be:', newData.posts.length);
+      logger.debug('addPosts - New total will be:', newData.posts.length);
       saveAppData(newData);
-      console.log('addPosts - Saved to localStorage');
+      logger.debug('addPosts - Saved to localStorage');
       return newData;
     });
   };
@@ -192,11 +193,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addMonthlyPlan = (plan: MonthlyPlan) => {
-    console.log('addMonthlyPlan called with:', plan.id);
+    logger.debug('addMonthlyPlan called with:', plan.id);
     setData((prevData) => {
       const newData = { ...prevData, monthlyPlans: [...prevData.monthlyPlans, plan] };
       saveAppData(newData);
-      console.log('addMonthlyPlan - Saved to localStorage');
+      logger.debug('addMonthlyPlan - Saved to localStorage');
       return newData;
     });
   };

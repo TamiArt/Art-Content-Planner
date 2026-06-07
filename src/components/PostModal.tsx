@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { buildPromptForPost, copyToClipboard } from '../utils/promptBuilder';
 import { generateSEOKeysForPost } from '../utils/seoKeywords';
 import type { Post } from '../types';
+import { goalColors, goalLabels } from '../utils/contentLabels';
 import { Copy, Check, Edit, Trash2, RefreshCw, Calendar as CalendarIcon, X } from 'lucide-react';
 
 interface PostModalProps {
@@ -73,22 +74,6 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
   const handleEdit = () => {
     navigate(`/posts/${post.id}`);
     onClose();
-  };
-
-  const goalColors: Record<string, string> = {
-    reach: '#3b82f6',
-    engagement: '#8b5cf6',
-    trust: '#10b981',
-    lead: '#f59e0b',
-    sale: '#ef4444',
-  };
-
-  const goalLabels: Record<string, string> = {
-    reach: 'Охват',
-    engagement: 'Вовлечение',
-    trust: 'Доверие',
-    lead: 'Заявка',
-    sale: 'Продажа',
   };
 
   return (

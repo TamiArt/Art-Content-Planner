@@ -29,7 +29,7 @@ const Layout: React.FC = () => {
     { path: '/services', label: 'Услуги', icon: Briefcase },
     { path: '/offers', label: 'Офферы', icon: Tag },
     { path: '/settings', label: 'Настройки', icon: Settings },
-    { path: '/debug', label: '🐛 Debug', icon: Settings },
+    ...(import.meta.env.DEV ? [{ path: '/debug', label: '🐛 Debug', icon: Settings }] : []),
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
