@@ -3,27 +3,61 @@ import { useParams, useNavigate } from 'react-router';
 import { useAppContext } from '../context/AppContext';
 import { buildPromptForPost, copyToClipboard } from '../utils/promptBuilder';
 import { calculateAnalytics } from '../utils/analytics';
-import type { Post, PostStatus, Platform, Format, ContentGoal } from '../types';
-import { Copy, Check, Trash2 } from 'lucide-react';
+import { formatDateLocal } from '../utils/date';
+import { createFormatVariations } from '../utils/contentWorkflows';
+import type { Post, PostStatus, Platform, Format, ContentGoal, PostAnalytics } from '../types';
+import { Copy, Check, Layers, Trash2 } from 'lucide-react';
+
+const createEmptyPost = (): Post => ({
+  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  date: formatDateLocal(new Date()),
+  time: '09:00',
+  platform: 'Instagram',
+  format: 'Instagram Post',
+  goal: 'reach',
+  funnelStage: 'attraction',
+  mainMetric: 'views',
+  topic: '',
+  idea: '',
+  hookVariants: [],
+  visualScenario: '',
+  textStructure: '',
+  cta: '',
+  seoKeys: [],
+  lsiKeys: [],
+  hashtags: [],
+  status: 'idea',
+  firstFrameDescription: '',
+  onScreenHookText: '',
+  firstThreeSecondsPlan: '',
+  retentionPlan: '',
+  searchKeywords: [],
+  onScreenTextKeywords: [],
+  captionFirstLine: '',
+  altText: '',
+});
 
 const PostEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, updatePost, deletePost } = useAppContext();
+  const { data, addPost, addPosts, updatePost, deletePost, updateData } = useAppContext();
+  const isNewPost = id === 'new';
 
-  const post = data.posts.find((p) => p.id === id);
+  const post = isNewPost ? undefined : data.posts.find((p) => p.id === id);
 
-  const [formData, setFormData] = useState<Partial<Post>>(post || {});
+  const [formData, setFormData] = useState<Partial<Post>>(post || createEmptyPost());
   const [copied, setCopied] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
     if (post) {
       setFormData(post);
+    } else if (isNewPost) {
+      setFormData(createEmptyPost());
     }
-  }, [post]);
+  }, [isNewPost, post]);
 
-  if (!post) {
+  if (!post && !isNewPost) {
     return (
       <div className="post-editor">
         <div className="card">
@@ -36,27 +70,64 @@ const PostEditor: React.FC = () => {
     );
   }
 
-  const handleChange = (field: keyof Post, value: any) => {
-    setFormData({ ...formData, [field]: value });
+  const handleChange = <K extends keyof Post>(field: K, value: Post[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = () => {
     if (id) {
-      updatePost(id, formData);
-      alert('Пост сохранен');
+      const savedPost = formData as Post;
+      if (savedPost.selectedHook && !data.hookLibrary.some((hook) => hook.text === savedPost.selectedHook)) {
+        updateData({
+          hookLibrary: [
+            {
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: savedPost.selectedHook,
+              hookType: savedPost.hookType || 'question',
+              platform: savedPost.platform,
+              format: savedPost.format,
+              sourcePostId: savedPost.id,
+              usageCount: 1,
+              status: 'testing',
+              createdAt: new Date().toISOString(),
+            },
+            ...data.hookLibrary,
+          ],
+        });
+      }
+
+      if (isNewPost) {
+        addPost(savedPost);
+        alert('Пост создан');
+      } else {
+        updatePost(id, formData);
+        alert('Пост сохранен');
+      }
       navigate('/calendar');
     }
   };
 
   const handleDelete = () => {
+    if (isNewPost) {
+      navigate('/calendar');
+      return;
+    }
+
     if (confirm('Удалить этот пост?')) {
       deletePost(id!);
       navigate('/calendar');
     }
   };
 
+  const handleCreateFormatVersions = () => {
+    const variations = createFormatVariations({ ...(post || {}), ...formData } as Post);
+    addPosts(variations);
+    alert('Созданы варианты этого материала в других форматах');
+    navigate('/calendar');
+  };
+
   const handleGeneratePrompt = () => {
-    const prompt = buildPromptForPost({ ...post, ...formData } as Post, data.settings);
+    const prompt = buildPromptForPost({ ...(post || {}), ...formData } as Post, data.settings);
     handleChange('promptForAI', prompt);
     handleChange('status', 'prompt-ready');
   };
@@ -71,7 +142,7 @@ const PostEditor: React.FC = () => {
     }
   };
 
-  const handleAnalyticsChange = (field: string, value: number) => {
+  const handleAnalyticsChange = (field: keyof Omit<PostAnalytics, 'engagementRate' | 'saveRate' | 'shareRate' | 'commentRate' | 'subscribeConversionRate' | 'leadConversionRate'>, value: number) => {
     const newAnalytics = { ...(formData.analytics || {}), [field]: value };
     const calculated = calculateAnalytics(newAnalytics);
     handleChange('analytics', calculated);
@@ -80,14 +151,17 @@ const PostEditor: React.FC = () => {
   return (
     <div className="post-editor">
       <header className="page-header">
-        <h1>Редактор поста</h1>
+        <h1>{isNewPost ? 'Новый пост' : 'Редактор поста'}</h1>
         <div className="header-actions">
+          <button className="btn btn-secondary" onClick={handleCreateFormatVersions}>
+            <Layers size={16} /> Переупаковать в форматы
+          </button>
           <button className="btn btn-primary" onClick={handleSave}>
             Сохранить
           </button>
           <button className="btn btn-danger" onClick={handleDelete}>
             <Trash2 size={16} />
-            Удалить
+            {isNewPost ? 'Отмена' : 'Удалить'}
           </button>
         </div>
       </header>
@@ -175,6 +249,56 @@ const PostEditor: React.FC = () => {
           </div>
 
           <div className="form-group">
+            <label>Контроль первых кадров для Reels/TikTok</label>
+            <textarea
+              rows={2}
+              value={formData.firstFrameDescription || ''}
+              onChange={(e) => handleChange('firstFrameDescription', e.target.value)}
+              placeholder="Что видно в первом кадре, чтобы остановить скролл?"
+            />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Текст на экране</label>
+              <input value={formData.onScreenHookText || ''} onChange={(e) => handleChange('onScreenHookText', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Первые 3 секунды</label>
+              <input value={formData.firstThreeSecondsPlan || ''} onChange={(e) => handleChange('firstThreeSecondsPlan', e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Retention-план</label>
+            <textarea rows={2} value={formData.retentionPlan || ''} onChange={(e) => handleChange('retentionPlan', e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>Search SEO: ключевые фразы</label>
+            <input
+              value={formData.searchKeywords?.join(', ') || ''}
+              onChange={(e) => handleChange('searchKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+              placeholder="картина в интерьер, интерьерный скетч, картина маслом"
+            />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Ключи на экране</label>
+              <input
+                value={formData.onScreenTextKeywords?.join(', ') || ''}
+                onChange={(e) => handleChange('onScreenTextKeywords', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Первая строка описания</label>
+              <input value={formData.captionFirstLine || ''} onChange={(e) => handleChange('captionFirstLine', e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Alt/описание визуала</label>
+            <input value={formData.altText || ''} onChange={(e) => handleChange('altText', e.target.value)} />
+          </div>
+
+          <div className="form-group">
             <label>Заметки</label>
             <textarea
               rows={3}
@@ -248,7 +372,7 @@ const PostEditor: React.FC = () => {
             <label>Хэштеги (через запятую)</label>
             <input
               type="text"
-              value={formData.hashtags?.join(', ')}
+              value={formData.hashtags?.join(', ') || ''}
               onChange={(e) => handleChange('hashtags', e.target.value.split(',').map((h) => h.trim()))}
               placeholder="#хэштег1, #хэштег2, #хэштег3, #хэштег4, #хэштег5"
             />

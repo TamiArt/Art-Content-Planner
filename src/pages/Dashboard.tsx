@@ -2,17 +2,11 @@ import React from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Link } from 'react-router';
 import { getAnalyticsSummary } from '../utils/analytics';
-import { Calendar, TrendingUp, FileText, Lightbulb } from 'lucide-react';
+import { Calendar, FilePlus, Lightbulb, Plus } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { data } = useAppContext();
   const { posts } = data;
-
-  // Debug logging
-  console.log('Dashboard - Total posts:', posts.length);
-  if (posts.length > 0) {
-    console.log('Sample post:', posts[0]);
-  }
 
   const upcomingPosts = posts
     .filter((p) => new Date(p.date) >= new Date() && p.status !== 'published')
@@ -37,39 +31,24 @@ const Dashboard: React.FC = () => {
         <p>Личный контент-оператор для художника</p>
       </header>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <FileText size={32} />
-          <div>
-            <h3>{posts.length}</h3>
-            <p>Всего постов</p>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <Calendar size={32} />
-          <div>
-            <h3>{upcomingPosts.length}</h3>
-            <p>Предстоящие</p>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <TrendingUp size={32} />
-          <div>
-            <h3>{analytics.publishedPosts}</h3>
-            <p>Опубликовано</p>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <Lightbulb size={32} />
-          <div>
-            <h3>{data.ideas.length}</h3>
-            <p>Идей</p>
-          </div>
-        </div>
-      </div>
+      <section className="dashboard-quick-actions" aria-label="Быстрые действия">
+        <Link to="/ideas" className="quick-action-card quick-action-idea">
+          <Lightbulb size={28} />
+          <span>Добавить идею</span>
+        </Link>
+        <Link to="/posts/new" className="quick-action-card quick-action-post">
+          <Plus size={30} />
+          <span>Создать пост</span>
+        </Link>
+        <Link to="/generate" className="quick-action-card quick-action-generate">
+          <FilePlus size={28} />
+          <span>Сгенерировать месяц</span>
+        </Link>
+        <Link to="/calendar" className="quick-action-card quick-action-calendar">
+          <Calendar size={28} />
+          <span>Календарь</span>
+        </Link>
+      </section>
 
       <div className="content-grid">
         <section className="card upcoming-section">
@@ -112,7 +91,7 @@ const Dashboard: React.FC = () => {
                 <div className="progress-bar">
                   <div
                     className={`progress-fill status-${status}`}
-                    style={{ width: `${(count / posts.length) * 100}%` }}
+                    style={{ width: `${posts.length > 0 ? (count / posts.length) * 100 : 0}%` }}
                   />
                 </div>
               </div>
@@ -149,20 +128,6 @@ const Dashboard: React.FC = () => {
           </Link>
         </section>
 
-        <section className="card quick-actions">
-          <h2>Быстрые действия</h2>
-          <div className="action-buttons">
-            <Link to="/generate" className="btn btn-primary">
-              Сгенерировать месяц
-            </Link>
-            <Link to="/ideas" className="btn btn-secondary">
-              Добавить идею
-            </Link>
-            <Link to="/posts/new" className="btn btn-secondary">
-              Создать пост
-            </Link>
-          </div>
-        </section>
       </div>
     </div>
   );

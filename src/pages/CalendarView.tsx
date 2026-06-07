@@ -3,6 +3,9 @@ import { useAppContext } from '../context/AppContext';
 import { Link } from 'react-router';
 import PostModal from '../components/PostModal';
 import type { Post, PostStatus } from '../types';
+import { formatDateLocal } from '../utils/date';
+import { goalColors, goalLabels, statusLabels } from '../utils/contentLabels';
+import { logger } from '../utils/logger';
 
 const CalendarView: React.FC = () => {
   const { data } = useAppContext();
@@ -12,43 +15,19 @@ const CalendarView: React.FC = () => {
 
   const { posts } = data;
 
-  // Helper function to format date as YYYY-MM-DD without timezone conversion
-  const formatDateLocal = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const goalColors: Record<string, string> = {
-    reach: '#3b82f6',
-    engagement: '#8b5cf6',
-    trust: '#10b981',
-    lead: '#f59e0b',
-    sale: '#ef4444',
-  };
-
-  const goalLabels: Record<string, string> = {
-    reach: 'Охват',
-    engagement: 'Вовлечение',
-    trust: 'Доверие',
-    lead: 'Заявка',
-    sale: 'Продажа',
-  };
-
   const renderMonthView = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - startDate.getDay());
+    const mondayOffset = (firstDay.getDay() + 6) % 7;
+    startDate.setDate(startDate.getDate() - mondayOffset);
 
     const days = [];
     const currentDate = new Date(startDate);
 
-    // Debug logging
-    console.log('Calendar Debug:', {
+    logger.debug('Calendar Debug:', {
       totalPosts: posts.length,
       year,
       month,
@@ -60,7 +39,7 @@ const CalendarView: React.FC = () => {
       const dayPosts = posts.filter((p) => p.date === dateStr);
 
       if (dayPosts.length > 0) {
-        console.log(`Found ${dayPosts.length} posts for ${dateStr}`);
+        logger.debug(`Found ${dayPosts.length} posts for ${dateStr}`);
       }
 
       days.push({
@@ -74,7 +53,7 @@ const CalendarView: React.FC = () => {
     return (
       <div className="calendar-month">
         <div className="calendar-header">
-          {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'].map((day) => (
+          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
             <div key={day} className="calendar-day-name">
               {day}
             </div>
@@ -119,7 +98,8 @@ const CalendarView: React.FC = () => {
   const renderWeekView = () => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+    const mondayOffset = (today.getDay() + 6) % 7;
+    startOfWeek.setDate(today.getDate() - mondayOffset);
 
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
@@ -223,15 +203,6 @@ const CalendarView: React.FC = () => {
 
   const renderKanbanView = () => {
     const statuses: PostStatus[] = ['idea', 'prompt-ready', 'text-ready', 'visual-ready', 'scheduled', 'published'];
-    const statusLabels: Record<PostStatus, string> = {
-      idea: 'Идея',
-      'prompt-ready': 'Промпт готов',
-      'text-ready': 'Текст готов',
-      'visual-ready': 'Визуал готов',
-      scheduled: 'Запланировано',
-      published: 'Опубликовано',
-    };
-
     return (
       <div className="kanban-board">
         {statuses.map((status) => (

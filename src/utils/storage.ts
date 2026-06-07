@@ -1,5 +1,7 @@
 import type { AppData } from '../types';
-import { DEFAULT_SETTINGS, DEFAULT_SEO_CLUSTERS } from '../types';
+import { DEFAULT_CONTENT_BALANCE, DEFAULT_RUBRICS, DEFAULT_SETTINGS, DEFAULT_SEO_CLUSTERS } from '../types';
+import { logger } from './logger';
+import { parseAppData } from './storageSchema';
 
 const STORAGE_KEY = 'art-content-planner-data';
 const STORAGE_VERSION = '1.0.0';
@@ -13,6 +15,11 @@ export const getDefaultAppData = (): AppData => ({
   paintings: [],
   services: [],
   offers: [],
+  campaigns: [],
+  hookLibrary: [],
+  storySequences: [],
+  rubrics: DEFAULT_RUBRICS,
+  contentBalance: DEFAULT_CONTENT_BALANCE,
   seoCluster: DEFAULT_SEO_CLUSTERS,
   lastUpdated: new Date().toISOString(),
 });
@@ -23,15 +30,10 @@ export const loadAppData = (): AppData => {
     if (!stored) {
       return getDefaultAppData();
     }
-    const data = JSON.parse(stored) as AppData;
-    // Validate and merge with defaults if needed
-    return {
-      ...getDefaultAppData(),
-      ...data,
-      version: STORAGE_VERSION,
-    };
+    const data = JSON.parse(stored) as unknown;
+    return parseAppData(data, STORAGE_VERSION);
   } catch (error) {
-    console.error('Failed to load app data:', error);
+    logger.error('Failed to load app data:', error);
     return getDefaultAppData();
   }
 };
@@ -44,7 +46,7 @@ export const saveAppData = (data: AppData): void => {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave, null, 2));
   } catch (error) {
-    console.error('Failed to save app data:', error);
+    logger.error('Failed to save app data:', error);
     throw new Error('Failed to save data to localStorage');
   }
 };
@@ -63,7 +65,7 @@ export const exportToJSON = (data: AppData): void => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Failed to export JSON:', error);
+    logger.error('Failed to export JSON:', error);
     throw new Error('Failed to export data');
   }
 };
@@ -74,13 +76,10 @@ export const importFromJSON = (file: File): Promise<AppData> => {
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const data = JSON.parse(text) as AppData;
-        // Validate structure
-        if (!data.settings || !data.posts || !Array.isArray(data.posts)) {
-          throw new Error('Invalid data structure');
-        }
-        resolve(data);
+        const data = JSON.parse(text) as unknown;
+        resolve(parseAppData(data, STORAGE_VERSION));
       } catch (error) {
+        logger.error('Failed to import JSON:', error);
         reject(new Error('Invalid JSON file'));
       }
     };

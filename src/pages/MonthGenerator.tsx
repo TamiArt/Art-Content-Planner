@@ -5,6 +5,8 @@ import { generateMonthPlan } from '../utils/contentGenerator';
 import { generateSEOKeysForPost } from '../utils/seoKeywords';
 import { buildPromptForPost } from '../utils/promptBuilder';
 import type { Platform, ContentGoal } from '../types';
+import { goalLabels } from '../utils/contentLabels';
+import { logger } from '../utils/logger';
 import { Sparkles } from 'lucide-react';
 
 const MonthGenerator: React.FC = () => {
@@ -15,7 +17,6 @@ const MonthGenerator: React.FC = () => {
   const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
 
   const [month, setMonth] = useState(currentMonth);
-  const [postsPerWeek, setPostsPerWeek] = useState(data.settings.generator.defaultPostsPerWeek);
   const [selectedDays, setSelectedDays] = useState<string[]>(data.settings.generator.defaultDays);
   const [selectedTimes, setSelectedTimes] = useState<string[]>(data.settings.generator.defaultTimes);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(data.settings.generator.defaultPlatforms);
@@ -31,14 +32,6 @@ const MonthGenerator: React.FC = () => {
     Friday: 'Пятница',
     Saturday: 'Суббота',
     Sunday: 'Воскресенье',
-  };
-
-  const goalLabels: Record<ContentGoal, string> = {
-    reach: 'Охват',
-    engagement: 'Вовлечение',
-    trust: 'Доверие',
-    lead: 'Заявка',
-    sale: 'Продажа',
   };
 
   const toggleDay = (day: string) => {
@@ -111,22 +104,26 @@ const MonthGenerator: React.FC = () => {
     setIsGenerating(true);
 
     setTimeout(() => {
-      console.log('Starting content plan generation for month:', month);
+      logger.debug('Starting content plan generation for month:', month);
 
       const generatedPosts = generateMonthPlan({
         month,
         settings: {
-          defaultPostsPerWeek: postsPerWeek,
+          defaultPostsPerWeek: selectedDays.length * selectedTimes.length,
           defaultDays: selectedDays,
           defaultTimes: selectedTimes,
           defaultPlatforms: selectedPlatforms,
           defaultGoals: selectedGoals,
         },
+        paintings: data.paintings,
+        services: data.services,
+        contentBalance: data.contentBalance,
+        rubrics: data.rubrics,
       });
 
-      console.log('Generated posts count:', generatedPosts.length);
+      logger.debug('Generated posts count:', generatedPosts.length);
       if (generatedPosts.length > 0) {
-        console.log('Sample generated post:', generatedPosts[0]);
+        logger.debug('Sample generated post:', generatedPosts[0]);
       }
 
       // Add SEO keys and generate prompts for each post
@@ -135,22 +132,22 @@ const MonthGenerator: React.FC = () => {
         const prompt = buildPromptForPost(post, data.settings);
         return {
           ...post,
-          seoKeys: seoData.seoKeys,
-          lsiKeys: seoData.lsiKeys,
-          hashtags: seoData.hashtags,
+          seoKeys: [...new Set([...post.seoKeys, ...seoData.seoKeys])],
+          lsiKeys: [...new Set([...post.lsiKeys, ...seoData.lsiKeys])],
+          hashtags: [...new Set([...post.hashtags, ...seoData.hashtags])].slice(0, 5),
           promptForAI: prompt,
           status: 'prompt-ready' as const,
         };
       });
 
-      console.log('Posts with SEO count:', postsWithSEO.length);
+      logger.debug('Posts with SEO count:', postsWithSEO.length);
 
       // Prepare monthly plan data
       const monthlyPlan = {
         id: `${month}-${Date.now()}`,
         month,
         settings: {
-          defaultPostsPerWeek: postsPerWeek,
+          defaultPostsPerWeek: selectedDays.length * selectedTimes.length,
           defaultDays: selectedDays,
           defaultTimes: selectedTimes,
           defaultPlatforms: selectedPlatforms,
@@ -160,7 +157,7 @@ const MonthGenerator: React.FC = () => {
         createdAt: new Date().toISOString(),
       };
 
-      console.log('Navigating to review page with posts');
+      logger.debug('Navigating to review page with posts');
 
       setIsGenerating(false);
 
@@ -187,15 +184,13 @@ const MonthGenerator: React.FC = () => {
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </div>
 
-        <div className="form-group">
-          <label>Частота публикаций в неделю</label>
-          <input
-            type="number"
-            min="1"
-            max="7"
-            value={postsPerWeek}
-            onChange={(e) => setPostsPerWeek(Number(e.target.value))}
-          />
+        <div className="info-box">
+          План создаётся по выбранным дням недели и каждому указанному времени. Если выбрать 2 времени, в этот день будет 2 публикации.
+        </div>
+
+        <div className="info-box">
+          Генератор учитывает ваши каталоги: картин — {data.paintings.length}, услуг — {data.services.length}.
+          Для целей «Доверие», «Заявка» и «Продажа» он будет чаще брать конкретную картину или услугу как основу публикации.
         </div>
 
         <div className="form-group">
@@ -211,7 +206,7 @@ const MonthGenerator: React.FC = () => {
         </div>
 
         <div className="form-group">
-          <label>Время публикаций</label>
+          <label>Время публикаций (каждое время создаёт отдельный пост в выбранный день)</label>
           <div className="time-inputs">
             {selectedTimes.map((time, index) => (
               <div key={index} className="time-input-row">

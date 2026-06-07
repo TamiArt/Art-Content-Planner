@@ -10,6 +10,9 @@ import {
   Briefcase,
   Tag,
   BarChart3,
+  Megaphone,
+  Target,
+  Grid3X3,
   Settings,
   Menu,
   X,
@@ -28,8 +31,11 @@ const Layout: React.FC = () => {
     { path: '/paintings', label: 'Мои картины', icon: Image },
     { path: '/services', label: 'Услуги', icon: Briefcase },
     { path: '/offers', label: 'Офферы', icon: Tag },
+    { path: '/campaigns', label: 'Кампании', icon: Megaphone },
+    { path: '/hooks', label: 'Хуки', icon: Target },
+    { path: '/rubrics', label: 'Рубрики', icon: Grid3X3 },
     { path: '/settings', label: 'Настройки', icon: Settings },
-    { path: '/debug', label: '🐛 Debug', icon: Settings },
+    ...(import.meta.env.DEV ? [{ path: '/debug', label: '🐛 Debug', icon: Settings }] : []),
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);

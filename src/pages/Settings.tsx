@@ -61,6 +61,10 @@ const Settings: React.FC = () => {
             <li>Картин: {data.paintings.length}</li>
             <li>Услуг: {data.services.length}</li>
             <li>Офферов: {data.offers.length}</li>
+            <li>Кампаний: {data.campaigns.length}</li>
+            <li>Хуков: {data.hookLibrary.length}</li>
+            <li>Stories-цепочек: {data.storySequences.length}</li>
+            <li>Рубрик: {data.rubrics.length}</li>
             <li>Месячных планов: {data.monthlyPlans.length}</li>
           </ul>
           <p>
@@ -78,7 +82,7 @@ const Settings: React.FC = () => {
           Личный контент-оператор для художника. Генерирует контент-план, создает промпты для ИИ и помогает вести
           аналитику публикаций.
         </p>
-        <p>Приложение работает полностью офлайн, без сервера, без регистрации и без платных API.</p>
+        <p>Приложение работает без сервера, без регистрации и без платных API. Полноценный PWA/offline-режим находится в разработке и будет реализован в будущем.</p>
       </section>
     </div>
   );
