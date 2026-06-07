@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Link } from 'react-router';
 import { getAnalyticsSummary } from '../utils/analytics';
+import { Calendar, FilePlus, Lightbulb, Plus } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { data } = useAppContext();
@@ -30,19 +31,23 @@ const Dashboard: React.FC = () => {
         <p>Личный контент-оператор для художника</p>
       </header>
 
-      <section className="card quick-actions dashboard-quick-actions">
-        <h2>Быстрые действия</h2>
-        <div className="action-buttons">
-          <Link to="/generate" className="btn btn-primary">
-            Сгенерировать месяц
-          </Link>
-          <Link to="/ideas" className="btn btn-secondary">
-            Добавить идею
-          </Link>
-          <Link to="/posts/new" className="btn btn-secondary">
-            Создать пост
-          </Link>
-        </div>
+      <section className="dashboard-quick-actions" aria-label="Быстрые действия">
+        <Link to="/ideas" className="quick-action-card quick-action-idea">
+          <Lightbulb size={28} />
+          <span>Добавить идею</span>
+        </Link>
+        <Link to="/posts/new" className="quick-action-card quick-action-post">
+          <Plus size={30} />
+          <span>Создать пост</span>
+        </Link>
+        <Link to="/generate" className="quick-action-card quick-action-generate">
+          <FilePlus size={28} />
+          <span>Сгенерировать месяц</span>
+        </Link>
+        <Link to="/calendar" className="quick-action-card quick-action-calendar">
+          <Calendar size={28} />
+          <span>Календарь</span>
+        </Link>
       </section>
 
       <div className="content-grid">
