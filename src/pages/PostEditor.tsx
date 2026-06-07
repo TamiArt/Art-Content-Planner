@@ -3,27 +3,52 @@ import { useParams, useNavigate } from 'react-router';
 import { useAppContext } from '../context/AppContext';
 import { buildPromptForPost, copyToClipboard } from '../utils/promptBuilder';
 import { calculateAnalytics } from '../utils/analytics';
-import type { Post, PostStatus, Platform, Format, ContentGoal } from '../types';
+import { formatDateLocal } from '../utils/date';
+import type { Post, PostStatus, Platform, Format, ContentGoal, PostAnalytics } from '../types';
 import { Copy, Check, Trash2 } from 'lucide-react';
+
+const createEmptyPost = (): Post => ({
+  id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  date: formatDateLocal(new Date()),
+  time: '09:00',
+  platform: 'Instagram',
+  format: 'Instagram Post',
+  goal: 'reach',
+  funnelStage: 'attraction',
+  mainMetric: 'views',
+  topic: '',
+  idea: '',
+  hookVariants: [],
+  visualScenario: '',
+  textStructure: '',
+  cta: '',
+  seoKeys: [],
+  lsiKeys: [],
+  hashtags: [],
+  status: 'idea',
+});
 
 const PostEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, updatePost, deletePost } = useAppContext();
+  const { data, addPost, updatePost, deletePost } = useAppContext();
+  const isNewPost = id === 'new';
 
-  const post = data.posts.find((p) => p.id === id);
+  const post = isNewPost ? undefined : data.posts.find((p) => p.id === id);
 
-  const [formData, setFormData] = useState<Partial<Post>>(post || {});
+  const [formData, setFormData] = useState<Partial<Post>>(post || createEmptyPost());
   const [copied, setCopied] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
     if (post) {
       setFormData(post);
+    } else if (isNewPost) {
+      setFormData(createEmptyPost());
     }
-  }, [post]);
+  }, [isNewPost, post]);
 
-  if (!post) {
+  if (!post && !isNewPost) {
     return (
       <div className="post-editor">
         <div className="card">
@@ -36,19 +61,29 @@ const PostEditor: React.FC = () => {
     );
   }
 
-  const handleChange = (field: keyof Post, value: any) => {
-    setFormData({ ...formData, [field]: value });
+  const handleChange = <K extends keyof Post>(field: K, value: Post[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = () => {
     if (id) {
-      updatePost(id, formData);
-      alert('Пост сохранен');
+      if (isNewPost) {
+        addPost(formData as Post);
+        alert('Пост создан');
+      } else {
+        updatePost(id, formData);
+        alert('Пост сохранен');
+      }
       navigate('/calendar');
     }
   };
 
   const handleDelete = () => {
+    if (isNewPost) {
+      navigate('/calendar');
+      return;
+    }
+
     if (confirm('Удалить этот пост?')) {
       deletePost(id!);
       navigate('/calendar');
@@ -56,7 +91,7 @@ const PostEditor: React.FC = () => {
   };
 
   const handleGeneratePrompt = () => {
-    const prompt = buildPromptForPost({ ...post, ...formData } as Post, data.settings);
+    const prompt = buildPromptForPost({ ...(post || {}), ...formData } as Post, data.settings);
     handleChange('promptForAI', prompt);
     handleChange('status', 'prompt-ready');
   };
@@ -71,7 +106,7 @@ const PostEditor: React.FC = () => {
     }
   };
 
-  const handleAnalyticsChange = (field: string, value: number) => {
+  const handleAnalyticsChange = (field: keyof Omit<PostAnalytics, 'engagementRate' | 'saveRate' | 'shareRate' | 'commentRate' | 'subscribeConversionRate' | 'leadConversionRate'>, value: number) => {
     const newAnalytics = { ...(formData.analytics || {}), [field]: value };
     const calculated = calculateAnalytics(newAnalytics);
     handleChange('analytics', calculated);
@@ -80,14 +115,14 @@ const PostEditor: React.FC = () => {
   return (
     <div className="post-editor">
       <header className="page-header">
-        <h1>Редактор поста</h1>
+        <h1>{isNewPost ? 'Новый пост' : 'Редактор поста'}</h1>
         <div className="header-actions">
           <button className="btn btn-primary" onClick={handleSave}>
             Сохранить
           </button>
           <button className="btn btn-danger" onClick={handleDelete}>
             <Trash2 size={16} />
-            Удалить
+            {isNewPost ? 'Отмена' : 'Удалить'}
           </button>
         </div>
       </header>
@@ -248,7 +283,7 @@ const PostEditor: React.FC = () => {
             <label>Хэштеги (через запятую)</label>
             <input
               type="text"
-              value={formData.hashtags?.join(', ')}
+              value={formData.hashtags?.join(', ') || ''}
               onChange={(e) => handleChange('hashtags', e.target.value.split(',').map((h) => h.trim()))}
               placeholder="#хэштег1, #хэштег2, #хэштег3, #хэштег4, #хэштег5"
             />

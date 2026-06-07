@@ -29,7 +29,7 @@ export const router = createBrowserRouter([
       { path: 'services', Component: Services },
       { path: 'offers', Component: Offers },
       { path: 'settings', Component: Settings },
-      { path: 'debug', Component: DebugPanel },
+      ...(import.meta.env.DEV ? [{ path: 'debug', Component: DebugPanel }] : []),
     ],
   },
 ]);

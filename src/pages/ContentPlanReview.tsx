@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAppContext } from '../context/AppContext';
-import type { Post } from '../types';
-import { CheckCircle, XCircle, Calendar, Edit } from 'lucide-react';
+import type { MonthlyPlan, Post } from '../types';
+import { goalColors, goalLabels } from '../utils/contentLabels';
+import { logger } from '../utils/logger';
+import { CheckCircle, XCircle, Calendar } from 'lucide-react';
+
+type ContentPlanReviewState = {
+  posts?: Post[];
+  monthlyPlan?: MonthlyPlan;
+};
 
 const ContentPlanReview: React.FC = () => {
   const navigate = useNavigate();
@@ -10,38 +17,22 @@ const ContentPlanReview: React.FC = () => {
   const { addPosts, addMonthlyPlan } = useAppContext();
 
   const [generatedPosts, setGeneratedPosts] = useState<Post[]>([]);
-  const [monthlyPlanData, setMonthlyPlanData] = useState<any>(null);
+  const [monthlyPlanData, setMonthlyPlanData] = useState<MonthlyPlan | null>(null);
   const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     // Get generated posts from navigation state
-    const state = location.state as { posts?: Post[]; monthlyPlan?: any };
+    const state = location.state as ContentPlanReviewState | null;
 
     if (state?.posts && state.posts.length > 0) {
-      console.log('Content Plan Review - received posts:', state.posts.length);
+      logger.debug('Content Plan Review - received posts:', state.posts.length);
       setGeneratedPosts(state.posts);
-      setMonthlyPlanData(state.monthlyPlan);
+      setMonthlyPlanData(state.monthlyPlan ?? null);
     } else {
-      console.log('No posts found in navigation state, redirecting to generator');
+      logger.debug('No posts found in navigation state, redirecting to generator');
       navigate('/generate');
     }
   }, [location.state, navigate]);
-
-  const goalColors: Record<string, string> = {
-    reach: '#3b82f6',
-    engagement: '#8b5cf6',
-    trust: '#10b981',
-    lead: '#f59e0b',
-    sale: '#ef4444',
-  };
-
-  const goalLabels: Record<string, string> = {
-    reach: 'Охват',
-    engagement: 'Вовлечение',
-    trust: 'Доверие',
-    lead: 'Заявка',
-    sale: 'Продажа',
-  };
 
   const handleApprove = () => {
     if (generatedPosts.length === 0) {
@@ -51,7 +42,7 @@ const ContentPlanReview: React.FC = () => {
 
     setIsApproving(true);
 
-    console.log('Approving posts:', generatedPosts.length);
+    logger.debug('Approving posts:', generatedPosts.length);
 
     // Add all posts to the app context
     addPosts(generatedPosts);
@@ -61,7 +52,7 @@ const ContentPlanReview: React.FC = () => {
       addMonthlyPlan(monthlyPlanData);
     }
 
-    console.log('Posts approved and saved');
+    logger.debug('Posts approved and saved');
 
     // Small delay to ensure state is saved
     setTimeout(() => {
@@ -77,14 +68,6 @@ const ContentPlanReview: React.FC = () => {
     }
   };
 
-  const handleEditPost = (postId: string) => {
-    // Navigate to post editor with the generated post data
-    const post = generatedPosts.find(p => p.id === postId);
-    if (post) {
-      // For now, just show an alert - можно будет доработать редактор
-      alert('Редактирование пока недоступно на этапе просмотра. Одобрите план и отредактируйте пост в календаре.');
-    }
-  };
 
   if (generatedPosts.length === 0) {
     return (

@@ -1,4 +1,5 @@
 import type { Post, AppSettings } from '../types';
+import { logger } from './logger';
 
 export const buildPromptForPost = (post: Post, settings: AppSettings): string => {
   const { style } = settings;
@@ -120,7 +121,7 @@ export const copyToClipboard = async (text: string): Promise<boolean> => {
     await navigator.clipboard.writeText(text);
     return true;
   } catch (error) {
-    console.error('Failed to copy to clipboard:', error);
+    logger.error('Failed to copy to clipboard:', error);
     // Fallback method
     const textarea = document.createElement('textarea');
     textarea.value = text;
