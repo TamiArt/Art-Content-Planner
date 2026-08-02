@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppContext } from '../context/AppContext';
 import type { ContentGoal, Format, FunnelStage, Idea, Platform, Post } from '../types';
 import { formatDateLocal } from '../utils/date';
 import { goalLabels } from '../utils/contentLabels';
-import { CalendarPlus, Edit3, FilePlus, Lightbulb, Plus, Trash2, X } from 'lucide-react';
+import { CalendarPlus, Edit3, FilePlus, ImagePlus, Lightbulb, Plus, Trash2, X } from 'lucide-react';
 
 type IdeaFormState = {
   title: string;
   description: string;
   tags: string;
+  images: string[];
   platform: Platform;
   format: Format;
   goal: ContentGoal;
@@ -23,6 +24,7 @@ const createEmptyIdeaForm = (): IdeaFormState => ({
   title: '',
   description: '',
   tags: '',
+  images: [],
   platform: 'Instagram',
   format: 'Instagram Post',
   goal: 'reach',
@@ -31,6 +33,17 @@ const createEmptyIdeaForm = (): IdeaFormState => ({
 });
 
 const createId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+const MAX_IDEA_IMAGES = 5;
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+
+const readImage = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 
 const parseTags = (tags: string) =>
   tags
@@ -98,12 +111,15 @@ const IdeaBank: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [form, setForm] = useState<IdeaFormState>(createEmptyIdeaForm);
+  const [imageError, setImageError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const isEditing = editingIdeaId !== null;
 
   const resetForm = () => {
     setForm(createEmptyIdeaForm());
     setEditingIdeaId(null);
+    setImageError('');
     setShowForm(false);
   };
 
@@ -115,6 +131,7 @@ const IdeaBank: React.FC = () => {
       title: form.title.trim(),
       description: form.description.trim(),
       tags: parseTags(form.tags),
+      images: form.images,
       platform: form.platform,
       format: form.format,
       goal: form.goal,
@@ -141,6 +158,7 @@ const IdeaBank: React.FC = () => {
       title: idea.title,
       description: idea.description,
       tags: formatTags(idea.tags),
+      images: idea.images || [],
       platform: idea.platform || 'Instagram',
       format: idea.format || 'Instagram Post',
       goal: idea.goal || 'reach',
@@ -148,6 +166,36 @@ const IdeaBank: React.FC = () => {
       plannedTime: idea.plannedTime || '09:00',
     });
     setShowForm(true);
+  };
+
+  const handleImagesUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    const availableSlots = MAX_IDEA_IMAGES - form.images.length;
+    const validFiles = selectedFiles
+      .filter((file) => file.type.startsWith('image/') && file.size <= MAX_IMAGE_SIZE)
+      .slice(0, availableSlots);
+
+    if (selectedFiles.some((file) => !file.type.startsWith('image/'))) {
+      setImageError('Можно прикреплять только изображения.');
+    } else if (selectedFiles.some((file) => file.size > MAX_IMAGE_SIZE)) {
+      setImageError('Размер каждого изображения не должен превышать 2 МБ.');
+    } else if (selectedFiles.length > availableSlots) {
+      setImageError(`К одной идее можно прикрепить не более ${MAX_IDEA_IMAGES} изображений.`);
+    } else {
+      setImageError('');
+    }
+
+    if (validFiles.length > 0) {
+      const images = await Promise.all(validFiles.map(readImage));
+      setForm((prev) => ({ ...prev, images: [...prev.images, ...images] }));
+    }
+
+    event.target.value = '';
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    setForm((prev) => ({ ...prev, images: prev.images.filter((_, index) => index !== indexToRemove) }));
+    setImageError('');
   };
 
   const handleDelete = (id: string) => {
@@ -228,6 +276,42 @@ const IdeaBank: React.FC = () => {
             />
           </div>
 
+          <div className="form-group">
+            <label>Изображения</label>
+            <input
+              ref={imageInputRef}
+              className="visually-hidden"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImagesUpload}
+              disabled={form.images.length >= MAX_IDEA_IMAGES}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary idea-image-upload"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={form.images.length >= MAX_IDEA_IMAGES}
+            >
+              <ImagePlus size={16} />
+              Прикрепить изображения
+            </button>
+            <small className="form-hint">До {MAX_IDEA_IMAGES} изображений, не более 2 МБ каждое. Файлы сохраняются локально.</small>
+            {imageError && <p className="idea-image-error" role="alert">{imageError}</p>}
+            {form.images.length > 0 && (
+              <div className="idea-image-previews">
+                {form.images.map((image, index) => (
+                  <div className="idea-image-preview" key={`${image.slice(-24)}-${index}`}>
+                    <img src={image} alt={`Прикреплённое изображение ${index + 1}`} />
+                    <button type="button" onClick={() => removeImage(index)} aria-label={`Удалить изображение ${index + 1}`}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="form-grid form-grid-4">
             <div className="form-group">
               <label>Платформа</label>
@@ -305,6 +389,14 @@ const IdeaBank: React.FC = () => {
               </div>
 
               {idea.description && <p className="idea-description">{idea.description}</p>}
+
+              {idea.images && idea.images.length > 0 && (
+                <div className="idea-images">
+                  {idea.images.map((image, index) => (
+                    <img key={`${image.slice(-24)}-${index}`} src={image} alt={`${idea.title}, изображение ${index + 1}`} />
+                  ))}
+                </div>
+              )}
 
               <div className="idea-meta">
                 <span>{idea.platform || 'Instagram'}</span>
