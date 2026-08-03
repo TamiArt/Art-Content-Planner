@@ -112,6 +112,7 @@ export interface Idea {
   title: string;
   description: string;
   tags: string[];
+  images?: string[];
   platform?: Platform;
   format?: Format;
   goal?: ContentGoal;

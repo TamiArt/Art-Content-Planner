@@ -25,6 +25,7 @@ import type {
   StorySequence,
 } from '../types';
 import { DEFAULT_CONTENT_BALANCE, DEFAULT_RUBRICS, DEFAULT_SEO_CLUSTERS, DEFAULT_SETTINGS } from '../types';
+import { migrateAppData } from '../data/migrations/migrateAppData';
 
 const PLATFORMS = ['TikTok', 'Instagram'] as const satisfies readonly Platform[];
 const FORMATS = [
@@ -220,6 +221,7 @@ const parseIdea = (value: unknown): Idea => {
     title: readString(value, 'title'),
     description: readString(value, 'description'),
     tags: readStringArray(value, 'tags'),
+    images: readStringArray(value, 'images'),
     platform: value.platform === undefined ? undefined : readEnum(value, 'platform', PLATFORMS, 'Instagram'),
     format: value.format === undefined ? undefined : readEnum(value, 'format', FORMATS, 'Instagram Post'),
     goal: value.goal === undefined ? undefined : readEnum(value, 'goal', CONTENT_GOALS, 'reach'),
@@ -422,29 +424,27 @@ const parseContentBalance = (value: unknown): ContentBalanceMatrix => {
 };
 
 export const parseAppData = (value: unknown, storageVersion: string): AppData => {
-  if (!isRecord(value)) {
-    throw new Error('Invalid app data: expected object');
-  }
+  const migratedValue = migrateAppData(value, storageVersion);
 
-  if (value.settings === undefined && value.posts === undefined) {
+  if (migratedValue.settings === undefined && migratedValue.posts === undefined) {
     throw new Error('Invalid app data: not an Art Content Planner export');
   }
 
   return {
     version: storageVersion,
-    settings: parseSettings(value.settings),
-    monthlyPlans: readObjectArray(value, 'monthlyPlans', parseMonthlyPlan),
-    posts: readObjectArray(value, 'posts', parsePost),
-    ideas: readObjectArray(value, 'ideas', parseIdea),
-    paintings: readObjectArray(value, 'paintings', parsePainting),
-    services: readObjectArray(value, 'services', parseService),
-    offers: readObjectArray(value, 'offers', parseOffer),
-    campaigns: readObjectArray(value, 'campaigns', parseCampaign),
-    hookLibrary: readObjectArray(value, 'hookLibrary', parseHookLibraryItem),
-    storySequences: readObjectArray(value, 'storySequences', parseStorySequence),
-    rubrics: readObjectArray(value, 'rubrics', parseRubric, DEFAULT_RUBRICS),
-    contentBalance: parseContentBalance(value.contentBalance),
-    seoCluster: readObjectArray(value, 'seoCluster', parseSEOCluster, DEFAULT_SEO_CLUSTERS),
-    lastUpdated: readString(value, 'lastUpdated', new Date().toISOString()),
+    settings: parseSettings(migratedValue.settings),
+    monthlyPlans: readObjectArray(migratedValue, 'monthlyPlans', parseMonthlyPlan),
+    posts: readObjectArray(migratedValue, 'posts', parsePost),
+    ideas: readObjectArray(migratedValue, 'ideas', parseIdea),
+    paintings: readObjectArray(migratedValue, 'paintings', parsePainting),
+    services: readObjectArray(migratedValue, 'services', parseService),
+    offers: readObjectArray(migratedValue, 'offers', parseOffer),
+    campaigns: readObjectArray(migratedValue, 'campaigns', parseCampaign),
+    hookLibrary: readObjectArray(migratedValue, 'hookLibrary', parseHookLibraryItem),
+    storySequences: readObjectArray(migratedValue, 'storySequences', parseStorySequence),
+    rubrics: readObjectArray(migratedValue, 'rubrics', parseRubric, DEFAULT_RUBRICS),
+    contentBalance: parseContentBalance(migratedValue.contentBalance),
+    seoCluster: readObjectArray(migratedValue, 'seoCluster', parseSEOCluster, DEFAULT_SEO_CLUSTERS),
+    lastUpdated: readString(migratedValue, 'lastUpdated', new Date().toISOString()),
   };
 };
