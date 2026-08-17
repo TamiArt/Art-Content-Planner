@@ -1,11 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from '../types';
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
 import { logger } from '../utils/logger';
-import { mergeAppData } from '../utils/mergeAppData';
+import { authApi, syncApi, type AccountUser } from '../utils/syncApi';
 
 interface AppContextValue {
   data: AppData;
+  user: AccountUser | null;
+  authLoading: boolean;
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   updateData: (updates: Partial<AppData>) => void;
   addPost: (post: Post) => void;
   addPosts: (posts: Post[]) => void;
@@ -36,11 +42,104 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [data, setData] = useState<AppData>(getDefaultAppData());
+  const [user, setUser] = useState<AccountUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<AppContextValue['syncStatus']>('idle');
+  const revision = useRef(0);
+  const syncReady = useRef(false);
+  const skipNextSave = useRef(false);
 
   useEffect(() => {
     const loaded = loadAppData();
     setData(loaded);
+    authApi.me()
+      .then(({ user: activeUser }) => connectAccount(activeUser, loaded))
+      .catch(() => setAuthLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!user || !syncReady.current) return;
+    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    setSyncStatus(navigator.onLine ? 'syncing' : 'offline');
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await syncApi.save(data, revision.current);
+        revision.current = result.revision;
+        setSyncStatus('synced');
+      } catch (error) {
+        if ((error as { status?: number }).status === 409) {
+          try {
+            const remote = await syncApi.load();
+            revision.current = remote.revision;
+            if (remote.data) { setData(remote.data); saveAppData(remote.data); }
+            setSyncStatus('synced');
+          } catch { setSyncStatus('error'); }
+        } else setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [data, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const refresh = async () => {
+      if (!navigator.onLine) return setSyncStatus('offline');
+      try {
+        const remote = await syncApi.load();
+        if (remote.data && remote.revision > revision.current) {
+          revision.current = remote.revision;
+          skipNextSave.current = true;
+          setData(remote.data);
+          saveAppData(remote.data);
+        }
+        setSyncStatus('synced');
+      } catch { setSyncStatus('error'); }
+    };
+    const interval = window.setInterval(() => void refresh(), 15_000);
+    const onFocus = () => void refresh();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', onFocus); window.removeEventListener('online', onFocus); };
+  }, [user]);
+
+  const connectAccount = async (activeUser: AccountUser, localData: AppData) => {
+    setAuthLoading(true);
+    const remote = await syncApi.load();
+    revision.current = remote.revision;
+    if (remote.data) {
+      skipNextSave.current = true;
+      setData(remote.data);
+      saveAppData(remote.data);
+    } else {
+      const saved = await syncApi.save(localData, 0);
+      revision.current = saved.revision;
+    }
+    setUser(activeUser);
+    syncReady.current = true;
+    setSyncStatus('synced');
+    setAuthLoading(false);
+  };
+
+  const login = async (email: string, password: string) => {
+    const result = await authApi.login(email, password);
+    await connectAccount(result.user, loadAppData());
+  };
+
+  const register = async (email: string, password: string) => {
+    const result = await authApi.register(email, password);
+    await connectAccount(result.user, loadAppData());
+  };
+
+  const logout = async () => {
+    await authApi.logout();
+    syncReady.current = false;
+    revision.current = 0;
+    setUser(null);
+    setSyncStatus('idle');
+    const empty = getDefaultAppData();
+    setData(empty);
+    saveAppData(empty);
+  };
 
   const updateData = (updates: Partial<AppData>) => {
     setData((prevData) => {
@@ -232,6 +331,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider
       value={{
         data,
+        user,
+        authLoading,
+        syncStatus,
+        login,
+        register,
+        logout,
         updateData,
         addPost,
         addPosts,

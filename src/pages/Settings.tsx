@@ -1,23 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import type { AppData } from '../types';
-import { Download, Upload, RefreshCw, X, FileCheck2 } from 'lucide-react';
-import { countImportConflicts } from '../utils/mergeAppData';
-
-type ImportPreview = {
-  data: AppData;
-  fileName: string;
-  fileSize: number;
-};
-
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
-};
+import { Download, Upload, RefreshCw, Cloud } from 'lucide-react';
 
 const Settings: React.FC = () => {
-  const { data, exportData, previewImport, replaceData, mergeData, resetData } = useAppContext();
+  const { data, user, syncStatus, exportData, importData, resetData } = useAppContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState('');
@@ -75,8 +61,15 @@ const Settings: React.FC = () => {
       </header>
 
       <section className="card">
+        <h2><Cloud size={20} /> Аккаунт и синхронизация</h2>
+        <p><strong>{user?.email}</strong></p>
+        <p>Состояние: {syncStatus === 'synced' ? 'все изменения синхронизированы' : syncStatus === 'syncing' ? 'сохраняем изменения…' : syncStatus === 'offline' ? 'нет сети — изменения сохранятся после подключения' : 'требуется проверить соединение с сервером'}.</p>
+        <p><small>Для входа на телефоне откройте тот же адрес приложения и используйте эту почту и пароль.</small></p>
+      </section>
+
+      <section className="card">
         <h2>Данные приложения</h2>
-        <p>Все данные хранятся локально в вашем браузере. Регулярно делайте резервные копии.</p>
+        <p>Данные хранятся на вашем сервере и локально в браузере. JSON-экспорт остается дополнительной резервной копией.</p>
 
         <div className="settings-actions">
           <button className="btn btn-primary" onClick={exportData}>
@@ -128,7 +121,7 @@ const Settings: React.FC = () => {
           Личный контент-оператор для художника. Генерирует контент-план, создает промпты для ИИ и помогает вести
           аналитику публикаций.
         </p>
-        <p>Приложение работает без сервера, без регистрации и без платных API. Полноценный PWA/offline-режим находится в разработке и будет реализован в будущем.</p>
+        <p>Приложение не использует платные API: вход и синхронизация работают через встроенный сервер и SQLite.</p>
       </section>
 
       {importPreview && (
