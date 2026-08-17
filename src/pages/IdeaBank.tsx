@@ -40,8 +40,16 @@ const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 const readImage = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error('Не удалось прочитать изображение.'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать изображение.'));
+    reader.onabort = () => reject(new Error('Чтение изображения было отменено.'));
     reader.readAsDataURL(file);
   });
 
@@ -112,14 +120,18 @@ const IdeaBank: React.FC = () => {
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [form, setForm] = useState<IdeaFormState>(createEmptyIdeaForm);
   const [imageError, setImageError] = useState('');
+  const [isReadingImages, setIsReadingImages] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageReadIdRef = useRef(0);
 
   const isEditing = editingIdeaId !== null;
 
   const resetForm = () => {
+    imageReadIdRef.current += 1;
     setForm(createEmptyIdeaForm());
     setEditingIdeaId(null);
     setImageError('');
+    setIsReadingImages(false);
     setShowForm(false);
   };
 
@@ -170,6 +182,10 @@ const IdeaBank: React.FC = () => {
 
   const handleImagesUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);
+    event.target.value = '';
+
+    if (selectedFiles.length === 0) return;
+
     const availableSlots = MAX_IDEA_IMAGES - form.images.length;
     const validFiles = selectedFiles
       .filter((file) => file.type.startsWith('image/') && file.size <= MAX_IMAGE_SIZE)
@@ -186,11 +202,23 @@ const IdeaBank: React.FC = () => {
     }
 
     if (validFiles.length > 0) {
-      const images = await Promise.all(validFiles.map(readImage));
-      setForm((prev) => ({ ...prev, images: [...prev.images, ...images] }));
+      const imageReadId = ++imageReadIdRef.current;
+      setIsReadingImages(true);
+      try {
+        const images = await Promise.all(validFiles.map(readImage));
+        if (imageReadId !== imageReadIdRef.current) return;
+        setForm((prev) => ({
+          ...prev,
+          images: [...prev.images, ...images].slice(0, MAX_IDEA_IMAGES),
+        }));
+      } catch {
+        if (imageReadId === imageReadIdRef.current) {
+          setImageError('Не удалось прочитать одно из изображений. Попробуйте выбрать файлы ещё раз.');
+        }
+      } finally {
+        if (imageReadId === imageReadIdRef.current) setIsReadingImages(false);
+      }
     }
-
-    event.target.value = '';
   };
 
   const removeImage = (indexToRemove: number) => {
@@ -285,16 +313,16 @@ const IdeaBank: React.FC = () => {
               accept="image/*"
               multiple
               onChange={handleImagesUpload}
-              disabled={form.images.length >= MAX_IDEA_IMAGES}
+              disabled={form.images.length >= MAX_IDEA_IMAGES || isReadingImages}
             />
             <button
               type="button"
               className="btn btn-secondary idea-image-upload"
               onClick={() => imageInputRef.current?.click()}
-              disabled={form.images.length >= MAX_IDEA_IMAGES}
+              disabled={form.images.length >= MAX_IDEA_IMAGES || isReadingImages}
             >
               <ImagePlus size={16} />
-              Прикрепить изображения
+              {isReadingImages ? 'Загрузка…' : 'Прикрепить изображения'}
             </button>
             <small className="form-hint">До {MAX_IDEA_IMAGES} изображений, не более 2 МБ каждое. Файлы сохраняются локально.</small>
             {imageError && <p className="idea-image-error" role="alert">{imageError}</p>}
@@ -354,7 +382,7 @@ const IdeaBank: React.FC = () => {
           </div>
 
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary">
+            <button type="submit" className="btn btn-primary" disabled={isReadingImages}>
               {isEditing ? 'Сохранить изменения' : 'Сохранить идею'}
             </button>
             <button type="button" className="btn btn-secondary" onClick={resetForm}>

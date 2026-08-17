@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from '../types';
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
 import { logger } from '../utils/logger';
+import { mergeAppData } from '../utils/mergeAppData';
 
 interface AppContextValue {
   data: AppData;
@@ -25,7 +26,9 @@ interface AppContextValue {
   deleteOffer: (id: string) => void;
   addMonthlyPlan: (plan: MonthlyPlan) => void;
   exportData: () => void;
-  importData: (file: File) => Promise<void>;
+  previewImport: (file: File) => Promise<AppData>;
+  replaceData: (imported: AppData) => void;
+  mergeData: (imported: AppData) => void;
   resetData: () => void;
 }
 
@@ -206,10 +209,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     exportToJSON(data);
   };
 
-  const importData = async (file: File) => {
-    const imported = await importFromJSON(file);
-    setData(imported);
+  const previewImport = (file: File) => importFromJSON(file);
+
+  const replaceData = (imported: AppData) => {
     saveAppData(imported);
+    setData(imported);
+  };
+
+  const mergeData = (imported: AppData) => {
+    const merged = mergeAppData(data, imported);
+    saveAppData(merged);
+    setData(merged);
   };
 
   const resetData = () => {
@@ -242,7 +252,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteOffer,
         addMonthlyPlan,
         exportData,
-        importData,
+        previewImport,
+        replaceData,
+        mergeData,
         resetData,
       }}
     >
