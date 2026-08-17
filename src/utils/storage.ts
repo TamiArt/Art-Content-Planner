@@ -4,7 +4,7 @@ import { logger } from './logger';
 import { parseAppData } from './storageSchema';
 
 const STORAGE_KEY = 'art-content-planner-data';
-const STORAGE_VERSION = '1.0.0';
+const STORAGE_VERSION = '2.0.0';
 
 export const getDefaultAppData = (): AppData => ({
   version: STORAGE_VERSION,
