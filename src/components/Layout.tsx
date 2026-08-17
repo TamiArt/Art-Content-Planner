@@ -16,11 +16,16 @@ import {
   Settings,
   Menu,
   X,
+  Cloud,
+  CloudOff,
+  LogOut,
 } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const { user, syncStatus, logout } = useAppContext();
 
   const navItems = [
     { path: '/', label: 'Главная', icon: Home },
@@ -69,6 +74,14 @@ const Layout: React.FC = () => {
             );
           })}
         </nav>
+        <div className="account-panel">
+          <div className={`sync-state ${syncStatus}`} title="Состояние синхронизации">
+            {syncStatus === 'offline' || syncStatus === 'error' ? <CloudOff size={16} /> : <Cloud size={16} />}
+            <span>{syncStatus === 'syncing' ? 'Синхронизация…' : syncStatus === 'synced' ? 'Синхронизировано' : syncStatus === 'offline' ? 'Нет сети' : syncStatus === 'error' ? 'Ошибка синхронизации' : 'Локально'}</span>
+          </div>
+          <div className="account-email" title={user?.email}>{user?.email}</div>
+          <button className="account-logout" onClick={() => void logout()}><LogOut size={16} /> Выйти</button>
+        </div>
       </aside>
 
       <main className="main-content">

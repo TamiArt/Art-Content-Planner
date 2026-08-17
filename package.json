@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "server": "node server/index.mjs",
+    "start": "NODE_ENV=production node server/index.mjs",
+    "test": "node --test server/*.test.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
