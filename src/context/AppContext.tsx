@@ -2,13 +2,17 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from '../types';
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
 import { logger } from '../utils/logger';
-import { authApi, syncApi, type AccountUser } from '../utils/syncApi';
+import { mergeAppData } from '../utils/mergeAppData';
+import { authApi, syncApi, type AccountUser, type ApiError } from '../utils/syncApi';
 
 interface AppContextValue {
   data: AppData;
   user: AccountUser | null;
   authLoading: boolean;
+  backendAvailable: boolean | null;
+  localMode: boolean;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+  continueLocally: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -44,6 +48,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [data, setData] = useState<AppData>(getDefaultAppData());
   const [user, setUser] = useState<AccountUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [localMode, setLocalMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState<AppContextValue['syncStatus']>('idle');
   const revision = useRef(0);
   const syncReady = useRef(false);
@@ -53,8 +59,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const loaded = loadAppData();
     setData(loaded);
     authApi.me()
-      .then(({ user: activeUser }) => connectAccount(activeUser, loaded))
-      .catch(() => setAuthLoading(false));
+      .then(({ user: activeUser }) => {
+        setBackendAvailable(true);
+        return connectAccount(activeUser, loaded);
+      })
+      .catch((error: ApiError) => {
+        // 401 means the API is alive and the visitor simply has no session yet.
+        setBackendAvailable(error.status === 401);
+        setAuthLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -115,18 +128,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       revision.current = saved.revision;
     }
     setUser(activeUser);
+    setBackendAvailable(true);
+    setLocalMode(false);
     syncReady.current = true;
     setSyncStatus('synced');
     setAuthLoading(false);
   };
 
+  const continueLocally = () => {
+    syncReady.current = false;
+    revision.current = 0;
+    setUser(null);
+    setLocalMode(true);
+    setSyncStatus('idle');
+  };
+
   const login = async (email: string, password: string) => {
     const result = await authApi.login(email, password);
+    setBackendAvailable(true);
     await connectAccount(result.user, loadAppData());
   };
 
   const register = async (email: string, password: string) => {
     const result = await authApi.register(email, password);
+    setBackendAvailable(true);
     await connectAccount(result.user, loadAppData());
   };
 
@@ -333,7 +358,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         data,
         user,
         authLoading,
+        backendAvailable,
+        localMode,
         syncStatus,
+        continueLocally,
         login,
         register,
         logout,
