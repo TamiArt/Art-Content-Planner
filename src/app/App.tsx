@@ -9,9 +9,9 @@ import AuthScreen from '../components/AuthScreen';
 import { useAppContext } from '../context/AppContext';
 
 function AppContent() {
-  const { user, authLoading } = useAppContext();
+  const { user, authLoading, localMode } = useAppContext();
   if (authLoading) return <div className="app-loading"><div className="spinner" /><p>Загружаем ваши данные…</p></div>;
-  return user ? <RouterProvider router={router} /> : <AuthScreen />;
+  return user || localMode ? <RouterProvider router={router} /> : <AuthScreen />;
 }
 
 function App() {
