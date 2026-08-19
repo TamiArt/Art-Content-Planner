@@ -1,0 +1,12 @@
+name = "art-content-planner-api"
+main = "index.ts"
+compatibility_date = "2026-08-18"
+
+[vars]
+APP_ENV = "production"
+APP_ORIGIN = "https://art-content-planner.vercel.app"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "art-content-planner-db"
+database_id = "841f3c34-3c3e-4dab-87b8-adb1f4e88983"
