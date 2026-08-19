@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, LockKeyhole, Mail, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, Loader2, LockKeyhole, Mail, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
 const AuthScreen: React.FC = () => {
@@ -7,6 +7,7 @@ const AuthScreen: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,23 @@ const AuthScreen: React.FC = () => {
 
         <form onSubmit={submit} className="auth-form">
           <label><span>Почта</span><div className="auth-input"><Mail size={18} /><input type="email" autoComplete="email" required disabled={backendMissing} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></div></label>
-          <label><span>Пароль</span><div className="auth-input"><LockKeyhole size={18} /><input type="password" minLength={8} maxLength={128} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required disabled={backendMissing} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Минимум 8 символов" /></div></label>
+          <label>
+            <span>Пароль</span>
+            <div className="auth-input">
+              <LockKeyhole size={18} />
+              <input type={showPassword ? 'text' : 'password'} minLength={8} maxLength={128} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required disabled={backendMissing} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Минимум 8 символов" />
+              <button
+                type="button"
+                className="auth-password-toggle"
+                onClick={() => setShowPassword((visible) => !visible)}
+                disabled={backendMissing}
+                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </label>
           {error && <div className="auth-error" role="alert">{error}</div>}
           <button className="btn btn-primary auth-submit" disabled={busy || backendMissing}>{busy && <Loader2 size={17} className="spin" />}{mode === 'login' ? 'Войти' : 'Создать аккаунт'}</button>
         </form>

@@ -22,6 +22,7 @@ type SyncRow = { payload: string; revision: number; updated_at: string };
 const COOKIE_NAME = 'acp_session';
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
 const MAX_BODY_CHARS = 5_000_000;
+const PBKDF2_ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 
 const json = (data: unknown, status = 200, headers?: HeadersInit): Response => {
@@ -67,7 +68,7 @@ const hmacHex = async (secret: string, value: string): Promise<string> => {
 const derivePassword = async (password: string, salt: Uint8Array, secret: string): Promise<string> => {
   const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(`${password}:${secret}`), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations: 210_000 },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations: PBKDF2_ITERATIONS },
     keyMaterial,
     256,
   );
