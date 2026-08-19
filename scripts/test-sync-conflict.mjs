@@ -18,6 +18,14 @@ const entity = (id, topic) => ({ id, topic });
 
 try {
   const { mergeSyncConflict } = await loadTypeScriptModule('src/utils/syncConflict.ts', 'sync-conflict.mjs');
+  const {
+    applySyncDeleted,
+    fromSyncData,
+    markSyncDeleted,
+    mergeSyncDeleted,
+    toSyncData,
+  } = await loadTypeScriptModule('src/utils/syncTombstones.ts', 'sync-tombstones.mjs');
+
   const base = {
     version: '2.0.0', settings: { language: 'ru' }, monthlyPlans: [], posts: [], ideas: [], paintings: [], services: [], offers: [],
     campaigns: [], hookLibrary: [], storySequences: [], rubrics: [], contentBalance: {}, seoCluster: [], lastUpdated: '2026-08-19T00:00:00.000Z',
@@ -33,7 +41,27 @@ try {
   assert.deepEqual(resolved.settings, local.settings, 'pending local settings must win');
   assert.strictEqual(mergeSyncConflict(null, local), local, 'missing remote snapshot must preserve local data');
 
-  console.log('Sync conflict regression checks passed.');
+  const remoteDeleted = markSyncDeleted({}, 'posts', ['shared']);
+  const localDeleted = markSyncDeleted({}, 'ideas', ['idea-1']);
+  const deleted = mergeSyncDeleted(remoteDeleted, localDeleted, { posts: ['shared', 'remote-only'] });
+  assert.deepEqual(deleted.posts.sort(), ['remote-only', 'shared'], 'tombstones from devices must be unioned without duplicates');
+  assert.deepEqual(deleted.ideas, ['idea-1'], 'tombstones for other collections must be preserved');
+
+  const withDeleted = {
+    ...resolved,
+    ideas: [{ id: 'idea-1' }, { id: 'idea-2' }],
+  };
+  const filtered = applySyncDeleted(withDeleted, deleted);
+  assert.deepEqual(filtered.posts.map((post) => post.id), ['local-only'], 'deleted posts must not be resurrected by conflict merge');
+  assert.deepEqual(filtered.ideas.map((idea) => idea.id), ['idea-2'], 'deleted ideas must stay deleted');
+
+  const envelope = toSyncData(filtered, deleted);
+  assert.ok(envelope.__syncDeleted, 'sync payload must carry tombstones');
+  const restored = fromSyncData(envelope);
+  assert.deepEqual(restored.deleted, deleted, 'tombstones must survive server snapshot round-trip');
+  assert.equal('__syncDeleted' in restored.data, false, 'internal sync metadata must not leak into AppData state');
+
+  console.log('Sync conflict and tombstone regression checks passed.');
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
