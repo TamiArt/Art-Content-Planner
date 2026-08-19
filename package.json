@@ -6,9 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "server": "node server/index.mjs",
-    "start": "NODE_ENV=production node server/index.mjs",
-    "test": "node --test server/*.test.mjs"
+    "test": "node scripts/test-data.mjs && node scripts/test-sync-conflict.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -85,16 +83,8 @@
     "react-dom": "18.3.1"
   },
   "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
   },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.3.5"
-    }
-  }
+  "pnpm": { "overrides": { "vite": "6.3.5" } }
 }
