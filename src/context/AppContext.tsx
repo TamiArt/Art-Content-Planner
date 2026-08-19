@@ -3,6 +3,7 @@ import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from 
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
 import { logger } from '../utils/logger';
 import { mergeAppData } from '../utils/mergeAppData';
+import { mergeSyncConflict } from '../utils/syncConflict';
 import { authApi, syncApi, type AccountUser, type ApiError } from '../utils/syncApi';
 
 interface AppContextValue {
@@ -54,6 +55,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const revision = useRef(0);
   const syncReady = useRef(false);
   const skipNextSave = useRef(false);
+  const localChangeId = useRef(0);
+  const syncedChangeId = useRef(0);
 
   useEffect(() => {
     const loaded = loadAppData();
@@ -73,23 +76,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     if (!user || !syncReady.current) return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
+
+    const changeId = ++localChangeId.current;
     setSyncStatus(navigator.onLine ? 'syncing' : 'offline');
+
     const timer = window.setTimeout(async () => {
       try {
         const result = await syncApi.save(data, revision.current);
         revision.current = result.revision;
-        setSyncStatus('synced');
+        if (changeId === localChangeId.current) {
+          syncedChangeId.current = changeId;
+          setSyncStatus('synced');
+        }
       } catch (error) {
         if ((error as { status?: number }).status === 409) {
           try {
             const remote = await syncApi.load();
             revision.current = remote.revision;
-            if (remote.data) { setData(remote.data); saveAppData(remote.data); }
+
+            // A newer local edit appeared while resolving this conflict. Do not
+            // overwrite it; its own debounced save will run with the new revision.
+            if (changeId !== localChangeId.current) return;
+
+            const merged = mergeSyncConflict(remote.data, data);
+            const saved = await syncApi.save(merged, remote.revision);
+            revision.current = saved.revision;
+
+            if (changeId !== localChangeId.current) return;
+            syncedChangeId.current = changeId;
+            skipNextSave.current = true;
+            setData(merged);
+            saveAppData(merged);
             setSyncStatus('synced');
-          } catch { setSyncStatus('error'); }
-        } else setSyncStatus(navigator.onLine ? 'error' : 'offline');
+          } catch {
+            setSyncStatus(navigator.onLine ? 'error' : 'offline');
+          }
+        } else {
+          setSyncStatus(navigator.onLine ? 'error' : 'offline');
+        }
       }
     }, 700);
+
     return () => window.clearTimeout(timer);
   }, [data, user]);
 
@@ -97,6 +124,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!user) return;
     const refresh = async () => {
       if (!navigator.onLine) return setSyncStatus('offline');
+      // Never replace state while a local edit is still waiting to be accepted.
+      if (localChangeId.current !== syncedChangeId.current) return;
       try {
         const remote = await syncApi.load();
         if (remote.data && remote.revision > revision.current) {
@@ -106,19 +135,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           saveAppData(remote.data);
         }
         setSyncStatus('synced');
-      } catch { setSyncStatus('error'); }
+      } catch {
+        setSyncStatus('error');
+      }
     };
     const interval = window.setInterval(() => void refresh(), 15_000);
     const onFocus = () => void refresh();
     window.addEventListener('focus', onFocus);
     window.addEventListener('online', onFocus);
-    return () => { window.clearInterval(interval); window.removeEventListener('focus', onFocus); window.removeEventListener('online', onFocus); };
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+    };
   }, [user]);
 
   const connectAccount = async (activeUser: AccountUser, localData: AppData) => {
     setAuthLoading(true);
     const remote = await syncApi.load();
     revision.current = remote.revision;
+    localChangeId.current = 0;
+    syncedChangeId.current = 0;
     if (remote.data) {
       skipNextSave.current = true;
       setData(remote.data);
@@ -138,6 +175,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const continueLocally = () => {
     syncReady.current = false;
     revision.current = 0;
+    localChangeId.current = 0;
+    syncedChangeId.current = 0;
     setUser(null);
     setLocalMode(true);
     setSyncStatus('idle');
@@ -159,6 +198,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await authApi.logout();
     syncReady.current = false;
     revision.current = 0;
+    localChangeId.current = 0;
+    syncedChangeId.current = 0;
     setUser(null);
     setSyncStatus('idle');
     const empty = getDefaultAppData();
