@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const apiTarget = process.env.VITE_API_PROXY_TARGET || 'https://art-content-planner-api.plantcare-tami.workers.dev';
 
 function figmaAssetResolver() {
   return {
@@ -15,25 +16,22 @@ function figmaAssetResolver() {
         const filename = id.replace('figma:asset/', '');
         return path.resolve(__dirname, 'src/assets', filename);
       }
-
       return null;
     },
   };
 }
 
 export default defineConfig({
-  plugins: [
-    figmaAssetResolver(),
-    react(),
-    tailwindcss(),
-  ],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
+  plugins: [figmaAssetResolver(), react(), tailwindcss()],
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   assetsInclude: ['**/*.svg', '**/*.csv'],
   server: {
-    proxy: { '/api': 'http://localhost:3000' },
+    proxy: {
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
 });
