@@ -1,9 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import type { AppData, Post, Idea, Painting, Service, Offer, MonthlyPlan } from '../types';
 import { loadAppData, saveAppData, exportToJSON, importFromJSON, getDefaultAppData } from '../utils/storage';
-import { logger } from '../utils/logger';
 import { mergeAppData } from '../utils/mergeAppData';
 import { mergeSyncConflict } from '../utils/syncConflict';
+import {
+  applySyncDeleted,
+  clearSyncDeleted,
+  fromSyncData,
+  loadSyncDeleted,
+  markSyncDeleted,
+  mergeSyncDeleted,
+  saveSyncDeleted,
+  toSyncData,
+  type SyncDeleteCollection,
+  type SyncDeleted,
+} from '../utils/syncTombstones';
 import { authApi, syncApi, type AccountUser, type ApiError } from '../utils/syncApi';
 
 interface AppContextValue {
@@ -57,17 +68,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const skipNextSave = useRef(false);
   const localChangeId = useRef(0);
   const syncedChangeId = useRef(0);
+  const deletedRef = useRef<SyncDeleted>(loadSyncDeleted());
+
+  const persistDeleted = (deleted: SyncDeleted) => {
+    deletedRef.current = deleted;
+    saveSyncDeleted(deleted);
+  };
+
+  const rememberDeleted = (collection: SyncDeleteCollection, ids: string[]) => {
+    persistDeleted(markSyncDeleted(deletedRef.current, collection, ids));
+  };
 
   useEffect(() => {
     const loaded = loadAppData();
-    setData(loaded);
+    setData(applySyncDeleted(loaded, deletedRef.current));
     authApi.me()
       .then(({ user: activeUser }) => {
         setBackendAvailable(true);
         return connectAccount(activeUser, loaded);
       })
       .catch((error: ApiError) => {
-        // 401 means the API is alive and the visitor simply has no session yet.
         setBackendAvailable(error.status === 401);
         setAuthLoading(false);
       });
@@ -75,43 +95,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!user || !syncReady.current) return;
-    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
 
     const changeId = ++localChangeId.current;
     setSyncStatus(navigator.onLine ? 'syncing' : 'offline');
 
     const timer = window.setTimeout(async () => {
       try {
-        const result = await syncApi.save(data, revision.current);
+        const result = await syncApi.save(toSyncData(data, deletedRef.current), revision.current);
         revision.current = result.revision;
         if (changeId === localChangeId.current) {
           syncedChangeId.current = changeId;
           setSyncStatus('synced');
         }
       } catch (error) {
-        if ((error as { status?: number }).status === 409) {
-          try {
-            const remote = await syncApi.load();
-            revision.current = remote.revision;
+        if ((error as { status?: number }).status !== 409) {
+          setSyncStatus(navigator.onLine ? 'error' : 'offline');
+          return;
+        }
 
-            // A newer local edit appeared while resolving this conflict. Do not
-            // overwrite it; its own debounced save will run with the new revision.
-            if (changeId !== localChangeId.current) return;
+        try {
+          const remote = await syncApi.load();
+          revision.current = remote.revision;
+          if (changeId !== localChangeId.current) return;
 
-            const merged = mergeSyncConflict(remote.data, data);
-            const saved = await syncApi.save(merged, remote.revision);
-            revision.current = saved.revision;
-
-            if (changeId !== localChangeId.current) return;
-            syncedChangeId.current = changeId;
-            skipNextSave.current = true;
-            setData(merged);
-            saveAppData(merged);
-            setSyncStatus('synced');
-          } catch {
-            setSyncStatus(navigator.onLine ? 'error' : 'offline');
+          let remoteData: AppData | null = null;
+          let mergedDeleted = deletedRef.current;
+          if (remote.data) {
+            const parsed = fromSyncData(remote.data);
+            remoteData = parsed.data;
+            mergedDeleted = mergeSyncDeleted(deletedRef.current, parsed.deleted);
           }
-        } else {
+
+          persistDeleted(mergedDeleted);
+          const merged = applySyncDeleted(mergeSyncConflict(remoteData, data), mergedDeleted);
+          const saved = await syncApi.save(toSyncData(merged, mergedDeleted), remote.revision);
+          revision.current = saved.revision;
+
+          if (changeId !== localChangeId.current) return;
+          syncedChangeId.current = changeId;
+          skipNextSave.current = true;
+          setData(merged);
+          saveAppData(merged);
+          setSyncStatus('synced');
+        } catch {
           setSyncStatus(navigator.onLine ? 'error' : 'offline');
         }
       }
@@ -122,23 +152,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!user) return;
+
     const refresh = async () => {
       if (!navigator.onLine) return setSyncStatus('offline');
-      // Never replace state while a local edit is still waiting to be accepted.
       if (localChangeId.current !== syncedChangeId.current) return;
+
       try {
         const remote = await syncApi.load();
         if (remote.data && remote.revision > revision.current) {
+          const parsed = fromSyncData(remote.data);
+          const mergedDeleted = mergeSyncDeleted(deletedRef.current, parsed.deleted);
+          const nextData = applySyncDeleted(parsed.data, mergedDeleted);
+          persistDeleted(mergedDeleted);
           revision.current = remote.revision;
           skipNextSave.current = true;
-          setData(remote.data);
-          saveAppData(remote.data);
+          setData(nextData);
+          saveAppData(nextData);
         }
         setSyncStatus('synced');
       } catch {
         setSyncStatus('error');
       }
     };
+
     const interval = window.setInterval(() => void refresh(), 15_000);
     const onFocus = () => void refresh();
     window.addEventListener('focus', onFocus);
@@ -156,14 +192,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     revision.current = remote.revision;
     localChangeId.current = 0;
     syncedChangeId.current = 0;
+
     if (remote.data) {
+      const parsed = fromSyncData(remote.data);
+      persistDeleted(parsed.deleted);
       skipNextSave.current = true;
-      setData(remote.data);
-      saveAppData(remote.data);
+      setData(parsed.data);
+      saveAppData(parsed.data);
     } else {
-      const saved = await syncApi.save(localData, 0);
+      const local = applySyncDeleted(localData, deletedRef.current);
+      const saved = await syncApi.save(toSyncData(local, deletedRef.current), 0);
       revision.current = saved.revision;
+      setData(local);
     }
+
     setUser(activeUser);
     setBackendAvailable(true);
     setLocalMode(false);
@@ -200,6 +242,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     revision.current = 0;
     localChangeId.current = 0;
     syncedChangeId.current = 0;
+    deletedRef.current = {};
+    clearSyncDeleted();
     setUser(null);
     setSyncStatus('idle');
     const empty = getDefaultAppData();
@@ -207,231 +251,135 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveAppData(empty);
   };
 
-  const updateData = (updates: Partial<AppData>) => {
-    setData((prevData) => {
-      const newData = { ...prevData, ...updates };
-      saveAppData(newData);
-      return newData;
-    });
+  const store = (next: AppData): AppData => {
+    saveAppData(next);
+    return next;
   };
 
-  const addPost = (post: Post) => {
-    setData((prevData) => {
-      const newData = { ...prevData, posts: [...prevData.posts, post] };
-      saveAppData(newData);
-      return newData;
-    });
-  };
+  const updateData = (updates: Partial<AppData>) => setData((current) => store({ ...current, ...updates }));
 
-  const addPosts = (posts: Post[]) => {
-    logger.debug('addPosts called with posts:', posts.length);
-    setData((prevData) => {
-      logger.debug('addPosts - Current posts in state:', prevData.posts.length);
-      const newData = { ...prevData, posts: [...prevData.posts, ...posts] };
-      logger.debug('addPosts - New total will be:', newData.posts.length);
-      saveAppData(newData);
-      logger.debug('addPosts - Saved to localStorage');
-      return newData;
-    });
-  };
-
-  const updatePost = (id: string, updates: Partial<Post>) => {
-    setData((prevData) => {
-      const newPosts = prevData.posts.map((p) => (p.id === id ? { ...p, ...updates } : p));
-      const newData = { ...prevData, posts: newPosts };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
+  const addPost = (post: Post) => setData((current) => store({ ...current, posts: [...current.posts, post] }));
+  const addPosts = (posts: Post[]) => setData((current) => store({ ...current, posts: [...current.posts, ...posts] }));
+  const updatePost = (id: string, updates: Partial<Post>) => setData((current) => store({
+    ...current,
+    posts: current.posts.map((post) => (post.id === id ? { ...post, ...updates } : post)),
+  }));
   const deletePost = (id: string) => {
-    setData((prevData) => {
-      const newData = { ...prevData, posts: prevData.posts.filter((p) => p.id !== id) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('posts', [id]);
+    setData((current) => store({ ...current, posts: current.posts.filter((post) => post.id !== id) }));
   };
-
   const deletePosts = (ids: string[]) => {
-    setData((prevData) => {
-      const newData = { ...prevData, posts: prevData.posts.filter((p) => !ids.includes(p.id)) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('posts', ids);
+    const deleted = new Set(ids);
+    setData((current) => store({ ...current, posts: current.posts.filter((post) => !deleted.has(post.id)) }));
   };
 
-  const addIdea = (idea: Idea) => {
-    setData((prevData) => {
-      const newData = { ...prevData, ideas: [...prevData.ideas, idea] };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
-  const updateIdea = (id: string, updates: Partial<Idea>) => {
-    setData((prevData) => {
-      const newIdeas = prevData.ideas.map((i) => (i.id === id ? { ...i, ...updates } : i));
-      const newData = { ...prevData, ideas: newIdeas };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
+  const addIdea = (idea: Idea) => setData((current) => store({ ...current, ideas: [...current.ideas, idea] }));
+  const updateIdea = (id: string, updates: Partial<Idea>) => setData((current) => store({
+    ...current,
+    ideas: current.ideas.map((idea) => (idea.id === id ? { ...idea, ...updates } : idea)),
+  }));
   const deleteIdea = (id: string) => {
-    setData((prevData) => {
-      const newData = { ...prevData, ideas: prevData.ideas.filter((i) => i.id !== id) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('ideas', [id]);
+    setData((current) => store({ ...current, ideas: current.ideas.filter((idea) => idea.id !== id) }));
   };
 
-  const addPainting = (painting: Painting) => {
-    setData((prevData) => {
-      const newData = { ...prevData, paintings: [...prevData.paintings, painting] };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
-  const updatePainting = (id: string, updates: Partial<Painting>) => {
-    setData((prevData) => {
-      const newPaintings = prevData.paintings.map((p) => (p.id === id ? { ...p, ...updates } : p));
-      const newData = { ...prevData, paintings: newPaintings };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
+  const addPainting = (painting: Painting) => setData((current) => store({ ...current, paintings: [...current.paintings, painting] }));
+  const updatePainting = (id: string, updates: Partial<Painting>) => setData((current) => store({
+    ...current,
+    paintings: current.paintings.map((painting) => (painting.id === id ? { ...painting, ...updates } : painting)),
+  }));
   const deletePainting = (id: string) => {
-    setData((prevData) => {
-      const newData = { ...prevData, paintings: prevData.paintings.filter((p) => p.id !== id) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('paintings', [id]);
+    setData((current) => store({ ...current, paintings: current.paintings.filter((painting) => painting.id !== id) }));
   };
 
-  const addService = (service: Service) => {
-    setData((prevData) => {
-      const newData = { ...prevData, services: [...prevData.services, service] };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
-  const updateService = (id: string, updates: Partial<Service>) => {
-    setData((prevData) => {
-      const newServices = prevData.services.map((s) => (s.id === id ? { ...s, ...updates } : s));
-      const newData = { ...prevData, services: newServices };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
+  const addService = (service: Service) => setData((current) => store({ ...current, services: [...current.services, service] }));
+  const updateService = (id: string, updates: Partial<Service>) => setData((current) => store({
+    ...current,
+    services: current.services.map((service) => (service.id === id ? { ...service, ...updates } : service)),
+  }));
   const deleteService = (id: string) => {
-    setData((prevData) => {
-      const newData = { ...prevData, services: prevData.services.filter((s) => s.id !== id) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('services', [id]);
+    setData((current) => store({ ...current, services: current.services.filter((service) => service.id !== id) }));
   };
 
-  const addOffer = (offer: Offer) => {
-    setData((prevData) => {
-      const newData = { ...prevData, offers: [...prevData.offers, offer] };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
-  const updateOffer = (id: string, updates: Partial<Offer>) => {
-    setData((prevData) => {
-      const newOffers = prevData.offers.map((o) => (o.id === id ? { ...o, ...updates } : o));
-      const newData = { ...prevData, offers: newOffers };
-      saveAppData(newData);
-      return newData;
-    });
-  };
-
+  const addOffer = (offer: Offer) => setData((current) => store({ ...current, offers: [...current.offers, offer] }));
+  const updateOffer = (id: string, updates: Partial<Offer>) => setData((current) => store({
+    ...current,
+    offers: current.offers.map((offer) => (offer.id === id ? { ...offer, ...updates } : offer)),
+  }));
   const deleteOffer = (id: string) => {
-    setData((prevData) => {
-      const newData = { ...prevData, offers: prevData.offers.filter((o) => o.id !== id) };
-      saveAppData(newData);
-      return newData;
-    });
+    rememberDeleted('offers', [id]);
+    setData((current) => store({ ...current, offers: current.offers.filter((offer) => offer.id !== id) }));
   };
 
-  const addMonthlyPlan = (plan: MonthlyPlan) => {
-    logger.debug('addMonthlyPlan called with:', plan.id);
-    setData((prevData) => {
-      const newData = { ...prevData, monthlyPlans: [...prevData.monthlyPlans, plan] };
-      saveAppData(newData);
-      logger.debug('addMonthlyPlan - Saved to localStorage');
-      return newData;
-    });
-  };
+  const addMonthlyPlan = (plan: MonthlyPlan) => setData((current) => store({ ...current, monthlyPlans: [...current.monthlyPlans, plan] }));
 
-  const exportData = () => {
-    exportToJSON(data);
-  };
-
+  const exportData = () => exportToJSON(data);
   const previewImport = (file: File) => importFromJSON(file);
 
   const replaceData = (imported: AppData) => {
+    deletedRef.current = {};
+    clearSyncDeleted();
     saveAppData(imported);
     setData(imported);
   };
 
   const mergeData = (imported: AppData) => {
-    const merged = mergeAppData(data, imported);
+    const merged = applySyncDeleted(mergeAppData(data, imported), deletedRef.current);
     saveAppData(merged);
     setData(merged);
   };
 
   const resetData = () => {
-    const newData = getDefaultAppData();
-    setData(newData);
-    saveAppData(newData);
+    rememberDeleted('posts', data.posts.map((item) => item.id));
+    rememberDeleted('ideas', data.ideas.map((item) => item.id));
+    rememberDeleted('paintings', data.paintings.map((item) => item.id));
+    rememberDeleted('services', data.services.map((item) => item.id));
+    rememberDeleted('offers', data.offers.map((item) => item.id));
+    const empty = getDefaultAppData();
+    setData(empty);
+    saveAppData(empty);
   };
 
   return (
-    <AppContext.Provider
-      value={{
-        data,
-        user,
-        authLoading,
-        backendAvailable,
-        localMode,
-        syncStatus,
-        continueLocally,
-        login,
-        register,
-        logout,
-        updateData,
-        addPost,
-        addPosts,
-        updatePost,
-        deletePost,
-        deletePosts,
-        addIdea,
-        updateIdea,
-        deleteIdea,
-        addPainting,
-        updatePainting,
-        deletePainting,
-        addService,
-        updateService,
-        deleteService,
-        addOffer,
-        updateOffer,
-        deleteOffer,
-        addMonthlyPlan,
-        exportData,
-        previewImport,
-        replaceData,
-        mergeData,
-        resetData,
-      }}
-    >
+    <AppContext.Provider value={{
+      data,
+      user,
+      authLoading,
+      backendAvailable,
+      localMode,
+      syncStatus,
+      continueLocally,
+      login,
+      register,
+      logout,
+      updateData,
+      addPost,
+      addPosts,
+      updatePost,
+      deletePost,
+      deletePosts,
+      addIdea,
+      updateIdea,
+      deleteIdea,
+      addPainting,
+      updatePainting,
+      deletePainting,
+      addService,
+      updateService,
+      deleteService,
+      addOffer,
+      updateOffer,
+      deleteOffer,
+      addMonthlyPlan,
+      exportData,
+      previewImport,
+      replaceData,
+      mergeData,
+      resetData,
+    }}>
       {children}
     </AppContext.Provider>
   );
@@ -439,8 +387,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 export const useAppContext = (): AppContextValue => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useAppContext must be used within AppProvider');
-  }
+  if (!context) throw new Error('useAppContext must be used within AppProvider');
   return context;
 };

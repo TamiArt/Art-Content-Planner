@@ -1,7 +1,7 @@
-import type { AppData } from '../types';
+import type { SyncData } from './syncTombstones';
 
 export interface AccountUser { id: number; email: string }
-export interface SyncSnapshot { data: AppData | null; revision: number; updatedAt: string | null }
+export interface SyncSnapshot { data: SyncData | null; revision: number; updatedAt: string | null }
 
 export interface ApiError extends Error {
   status?: number;
@@ -66,7 +66,7 @@ export const authApi = {
 
 export const syncApi = {
   load: () => request<SyncSnapshot>('/api/sync'),
-  save: (data: AppData, revision: number) => request<{ revision: number; updatedAt: string }>('/api/sync', {
+  save: (data: SyncData, revision: number) => request<{ revision: number; updatedAt: string }>('/api/sync', {
     method: 'PUT', body: JSON.stringify({ data, revision }),
   }),
 };
